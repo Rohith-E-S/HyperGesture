@@ -1,0 +1,62 @@
+# Publishes the container image .devcontainer.json pins, under this repository's own
+# registry path. Upstream's image cannot be written from here, so the pin points at a
+# copy this workflow owns.
+#
+# The image is private by default. To let other people pull it, open the package on
+# GitHub and change its visibility, or run `docker login ghcr.io` once.
+
+name: Dev image
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "docker/dev.Dockerfile"
+      - ".devcontainer.json"
+      - ".github/workflows/dev-image.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: dev-image
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and push the dev image
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Read the pinned image
+        id: image
+        run: |
+          ref="$(./scripts/devcontainer-image.sh)"
+          echo "name=${ref%:*}" >>"${GITHUB_OUTPUT}"
+          echo "tag=${ref##*:}" >>"${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/dev.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
+            ${{ steps.image.outputs.name }}:latest

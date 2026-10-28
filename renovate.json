@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices"
+  ],
+  "reviewers": [
+    "Rohith-E-S"
+  ],
+  "assignAutomerge": true,
+  "prConcurrentLimit": 0,
+  "prHourlyLimit": 0,
+  "gitIgnoredAuthors": [
+    "41898282+github-actions[bot]@users.noreply.github.com"
+  ],
+  "packageRules": [
+    {
+      "description": "The dev container pin belongs to CI, not to Renovate.",
+      "matchManagers": ["devcontainer"],
+      "enabled": false
+    },
+    {
+      "description": "Android Gradle Plugin and Gradle move together",
+      "groupName": "android-gradle",
+      "matchPackageNames": [
+        "com.android.application",
+        "com.android.tools.build:gradle",
+        "gradle"
+      ]
+    },
+    {
+      "description": "Kotlin and its Compose compiler plugin must stay on the same version",
+      "groupName": "kotlin",
+      "matchPackageNames": [
+        "org.jetbrains.kotlin.plugin.compose",
+        "/^org.jetbrains.kotlin:/",
+        "/^org.jetbrains.kotlinx:/"
+      ]
+    },
+    {
+      "groupName": "androidx",
+      "matchPackageNames": [
+        "/^androidx\\./"
+      ]
+    },
+    {
+      "description": "Auto-merge all minor, patch, pin, and digest updates",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "pin",
+        "digest"
+      ],
+      "addLabels": ["automerge"],
+      "automerge": true,
+      "platformAutomerge": true
+    }
+  ]
+}

@@ -1,0 +1,137 @@
+# Drives a real emulator through the gesture suites in e2e/, which is the only way to catch
+# integration bugs the JVM tests cannot reach. Runs the same scripts a developer runs by hand.
+
+name: Gesture E2E
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "app/**"
+      - "e2e/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/e2e.yaml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "e2e/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/e2e.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install SDK packages
+        run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.8.2"
+
+      - name: Build the debug APK
+        run: gradle --no-daemon assembleDebug --stacktrace
+
+      - name: Upload the debug APK
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  shards:
+    name: Gesture suites ${{ matrix.shard }} (${{ matrix.suites }})
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: 1
+            suites: status-refresh app-switch
+          - shard: 2
+            suites: navigation back-revert
+          - shard: 3
+            suites: circle-to-search landscape-confirm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install the emulator and its system image
+        run: sdkmanager --install "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+
+      - name: Create the AVD the suites boot
+        run: echo no | avdmanager create avd --force -n hypergesture -k "system-images;android-36;google_apis;x86_64" -d pixel_7
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+
+      - name: Download the debug APK
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: debug-apk
+          path: app/build/outputs/apk/debug
+
+      - name: Run the gesture E2E suites
+        run: ./e2e/run.sh ${{ matrix.suites }}
+
+      - name: Upload the emulator log on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: emulator-log-${{ matrix.shard }}
+          path: build/e2e-logs/
+          retention-days: 3
+
+  gestures:
+    name: Gesture end-to-end
+    needs: [build, shards]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every shard to pass
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: ${RESULTS}"
+          for result in ${RESULTS}; do
+            [ "${result}" = success ] || exit 1
+          done
