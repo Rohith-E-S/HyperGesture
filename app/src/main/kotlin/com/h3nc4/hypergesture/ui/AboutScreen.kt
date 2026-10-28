@@ -27,17 +27,12 @@ import com.h3nc4.hypergesture.R
 @Composable
 internal fun AboutScreen(model: AppModel) {
     val context = LocalContext.current
-    val sourceUrl = stringResource(R.string.url_source)
     val licenseUrl = stringResource(R.string.url_license)
     ValueRow(
         stringResource(R.string.about_version),
         model.diagnostics.appVersionName ?: stringResource(R.string.diag_unknown),
     )
     // A device with no browser throws ActivityNotFoundException, which startFirst absorbs.
-    NavigationRow(
-        title = stringResource(R.string.about_source),
-        supporting = stringResource(R.string.value_source),
-    ) { context.startFirst(Intent(Intent.ACTION_VIEW, sourceUrl.toUri())) }
     NavigationRow(
         title = stringResource(R.string.diag_license),
         supporting = stringResource(R.string.value_license),
