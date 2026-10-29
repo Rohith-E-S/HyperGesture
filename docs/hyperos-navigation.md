@@ -31,9 +31,47 @@ This is blocked because the call needs `android.permission.CHANGE_OVERLAY_PACKAG
 
 ## Shizuku recovery
 
-HyperGesture has an explicit, off-by-default Shizuku option. When enabled, it checks and repairs `Settings.Global force_fsg_nav_bar=1` and `Settings.Secure navigation_mode=2`, reads both values back, sets MIUI's gesture-version flag, and disables the three-button overlay when it is active. It also grants HyperGesture MIUI's autostart and battery-saver exemptions, usage stats, a doze whitelist entry and an active standby bucket so the vendor cleaner does not kill the service. It runs shell commands directly instead of a Shizuku UserService, which avoids a UserService startup crash on some MediaTek builds. The UI reports whether Shizuku is unavailable, permission is missing, both values were verified, or a write/readback failed. It checks on app resume, Shizuku binder availability, boot, package/preferred-home broadcasts when delivered (with a second check 1.5 seconds later to catch MIUI's delayed reset), real-time ContentObserver settings monitoring, and an inexact 15-minute WorkManager fallback.
+HyperGesture has an explicit, off-by-default Shizuku option that maintains `Settings.Global force_fsg_nav_bar=1` and `Settings.Secure navigation_mode=2`. It runs shell commands directly instead of a Shizuku UserService, which avoids a UserService startup crash on some MediaTek builds.
 
-Shizuku does not remove the setup requirement: on non-rooted devices it must be started again after each reboot. The check reports failure without claiming support when a build rejects writes. In particular, the upstream investigation reported writes unavailable on a Redmi 14; compatibility must be established per device/build. Disabling recovery cancels scheduled work and does not restore or otherwise change the current values. The manual navigation settings shortcut remains available.
+### Probe first, repair only on mismatch
+
+Every trigger starts with a zero-process read of both values through the app's own `ContentResolver`. Those reads need no permission, so a steady state costs no Shizuku call and spawns no shell. Only a mismatch reaches Shizuku, and the script re-checks the values itself before writing, so a probe that raced a repair does not write again. The script is generated from the same target list the probe verifies, so the two cannot drift.
+
+The repair also disables the three-button overlay when it is active and sets MIUI's `use_gesture_version_three` flag, but only on HyperOS builds. Shell output is drained while the command runs, so a chatty `cmd overlay list` cannot fill the pipe buffer and hang the wait.
+
+### Exemptions belong to forced runs
+
+The app-ops grants (10008, 10021, usage stats), the doze whitelist entry and the active standby bucket stop MIUI's cleaner from killing the service. They are granted by enabling recovery, at boot, and after the app replaces itself; a settings change, launcher switch, or periodic check only needs the two writes.
+
+### Triggers
+
+| Trigger | Source | Notes |
+| --- | --- | --- |
+| App resume, manual check, toggle | `AppModel` and the recovery card | Enabling, and the check on resume, force a full run |
+| Boot | `BOOT_COMPLETED` | Forced; HyperOS resets the mode across a reboot |
+| Settings change | ContentObserver in the accessibility service | A repair re-enters the observer with correct values, which stops the loop |
+| Default home change | `ACTION_PREFERRED_ACTIVITY_CHANGED`, registered at runtime | Fires only while the accessibility service is connected |
+| App installed or removed | `PACKAGE_ADDED` / `PACKAGE_REMOVED`, registered at runtime | Same requirement |
+| App updated | `MY_PACKAGE_REPLACED` in the manifest | The only package broadcast Android 8+ still delivers to a manifest receiver |
+| Periodic fallback | WorkManager, every 15 minutes | `KEEP`, so restarts do not reset the schedule |
+
+Package and default-home broadcasts are deliberately absent from the manifest: since Android 8's implicit-broadcast restrictions none of them reach a manifest receiver, so an entry there would look like a trigger and never fire. They are registered when `HyperGestureAccessibilityService` connects and removed when it unbinds.
+
+HyperOS's watchdog can reset the settings shortly after the broadcast, so a launcher or package trigger follows with one unconditional probe 1.5 seconds later. That pass is only a probe, so it costs nothing when the values stayed correct.
+
+### Status vocabulary
+
+- `VERIFIED` — both target values read back correctly.
+- `COMMAND_FAILED` — the shell exited non-zero or timed out and the readback was still wrong.
+- `NOT_VERIFIED` — the commands succeeded but the readback did not stick, usually the vendor watchdog reverting them.
+- `SHIZUKU_UNAVAILABLE`, `PERMISSION_DENIED` — no repair was attempted.
+- `DISABLED` — recovery is off.
+
+The readback outranks the exit code: a timed-out script that landed both values still reports `VERIFIED`. The card shows the status, when the last check ran, and which trigger caused it. Legacy `WRITE_FAILED` records from older builds read as `COMMAND_FAILED`.
+
+Known builds: Redmi 14, Android 16, HyperOS OS3.0 — the settings intent works, but writes were reported unavailable; compatibility must be established per device and build.
+
+Shizuku does not remove the setup requirement: on non-rooted devices it must be started again after each reboot. Disabling recovery cancels scheduled work and does not restore or otherwise change the current values. The manual navigation settings shortcut remains available.
 
 This maintains the navigation bar settings and the app's exemptions from MIUI's cleaner. It does **not** enable Xiaomi's native gesture engine, make native gestures work under third-party launchers, or touch accessibility configuration or gesture tuning.
 
