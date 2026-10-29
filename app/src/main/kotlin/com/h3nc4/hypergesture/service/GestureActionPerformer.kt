@@ -38,6 +38,9 @@ class GestureActionPerformer(private val service: AccessibilityService) {
         NavigationIntegrationFactory.create(service).assistantAttributionTag
     }
 
+    /** Called when a bottom-edge touch begins, so the recents list is ready by release. */
+    fun prefetchAppSwitch() = switcher.prefetchTasks()
+
     fun perform(action: GestureAction): Boolean {
         val globalAction = when (action) {
             GestureAction.Back -> AccessibilityService.GLOBAL_ACTION_BACK
