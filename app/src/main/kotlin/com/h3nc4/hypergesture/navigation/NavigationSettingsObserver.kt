@@ -42,6 +42,7 @@ internal class NavigationSettingsObserver(
             val resolver = context.contentResolver
             resolver.registerContentObserver(Settings.Global.getUriFor(FSG), false, this)
             resolver.registerContentObserver(Settings.Secure.getUriFor(NAVIGATION_MODE), false, this)
+            resolver.registerContentObserver(Settings.Global.getUriFor(GESTURE_VERSION), false, this)
         }
     }
 
@@ -52,5 +53,6 @@ internal class NavigationSettingsObserver(
     private companion object {
         const val FSG = "force_fsg_nav_bar"
         const val NAVIGATION_MODE = "navigation_mode"
+        const val GESTURE_VERSION = "use_gesture_version_three"
     }
 }

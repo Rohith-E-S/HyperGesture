@@ -223,18 +223,31 @@ internal object NavigationRecoveryScript {
             repairs.joinToString("\n")
         }
         val exemptions = if (includeExemptions) {
-            listOf(
-                "appops set $packageName 10008 allow 2>/dev/null || true",
-                "appops set $packageName 10021 allow 2>/dev/null || true",
-                "appops set $packageName android:get_usage_stats allow 2>/dev/null || true",
-                "dumpsys deviceidle whitelist +$packageName 2>/dev/null || true",
-                "am set-standby-bucket $packageName active 2>/dev/null || true",
-            )
+            buildString {
+                appendLine("exemption_failed=0")
+                listOf(
+                    "appops set $packageName 10008 allow 2>/dev/null",
+                    "appops set $packageName 10021 allow 2>/dev/null",
+                    "appops set $packageName android:get_usage_stats allow 2>/dev/null",
+                    "dumpsys deviceidle whitelist +$packageName 2>/dev/null",
+                    "am set-standby-bucket $packageName active 2>/dev/null",
+                ).forEach { appendLine("$it || exemption_failed=1") }
+                // The grants can fail silently, so success needs a positive marker rather
+                // than relying on the exit code alone.
+                appendLine("echo \"$EXEMPTIONS_MARKER$((1 - exemption_failed))\"")
+                appendLine("exit \$exemption_failed")
+            }
         } else {
-            emptyList()
+            ""
         }
-        return (listOf(body) + exemptions).filter { it.isNotBlank() }.joinToString("\n")
+        return listOf(body, exemptions).filter { it.isNotBlank() }.joinToString("\n")
     }
+
+    /** True only when the script ran to the end and every grant reported success. */
+    fun grantsSucceeded(output: String): Boolean =
+        output.lineSequence().any { it.trim() == "${EXEMPTIONS_MARKER}1" }
+
+    private const val EXEMPTIONS_MARKER = "EXEMPTIONS="
 }
 
 internal class NavigationRecoveryRunner(
@@ -301,8 +314,7 @@ internal class NavigationRecoveryRunner(
                 gateway.availability().failureStatus()
             }
         }
-        if (force && !result.timedOut && result.exitCode == 0) {
-            // The exemption commands end in `|| true`, so a clean exit is the only signal.
+        if (force && !result.timedOut && NavigationRecoveryScript.grantsSucceeded(result.output)) {
             store.markExemptionsGranted(true)
         }
         // The settings provider is the truth, even when the shell timed out or exited non-zero.

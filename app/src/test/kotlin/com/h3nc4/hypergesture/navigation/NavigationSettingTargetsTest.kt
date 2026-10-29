@@ -90,6 +90,23 @@ class NavigationSettingTargetsTest {
     }
 
     @Test
+    fun exemptionFailuresAreVisibleToTheRunner() {
+        val script = NavigationRecoveryScript.build(
+            packageName = "com.h3nc4.hypergesture",
+            includeExemptions = true,
+            hyperOs = false,
+            guard = false,
+        )
+        assertTrue(script.contains("exemption_failed=0"))
+        assertTrue(script.contains("|| exemption_failed=1"))
+        assertTrue(script.contains("echo \"EXEMPTIONS=$((1 - exemption_failed))\""))
+        assertTrue(script.contains("exit \$exemption_failed"))
+        assertTrue(NavigationRecoveryScript.grantsSucceeded("noise\nEXEMPTIONS=1\n"))
+        assertFalse(NavigationRecoveryScript.grantsSucceeded("noise\nEXEMPTIONS=0\n"))
+        assertFalse(NavigationRecoveryScript.grantsSucceeded(""))
+    }
+
+    @Test
     fun exemptionsAndHyperOsBitsAreOnlyAddedWhenAsked() {
         val minimal = NavigationRecoveryScript.build(
             packageName = "com.h3nc4.hypergesture",

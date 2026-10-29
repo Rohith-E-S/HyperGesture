@@ -176,6 +176,7 @@ class NavigationRecoveryRunnerTest {
         val f = Fixture(this)
         f.values(correct = true)
         f.hyperOs = true
+        f.shell.result = CommandResult(exitCode = 0, output = "EXEMPTIONS=1")
 
         assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.MANUAL, force = true))
 
@@ -193,6 +194,7 @@ class NavigationRecoveryRunnerTest {
         val f = Fixture(this)
         f.store.granted = false
         f.values(correct = true)
+        f.shell.result = CommandResult(exitCode = 0, output = "EXEMPTIONS=1")
 
         assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.PERIODIC))
 
@@ -204,6 +206,21 @@ class NavigationRecoveryRunnerTest {
         // Once granted, a steady state is back to probing without a process.
         assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.PERIODIC))
         assertEquals(1, f.shell.commands.size)
+    }
+
+    @Test
+    fun `a failed grant is not recorded and is retried`() = runBlocking {
+        val f = Fixture(this)
+        f.store.granted = false
+        f.values(correct = true)
+        f.shell.result = CommandResult(exitCode = 1, output = "appops: error\nEXEMPTIONS=0")
+
+        // The values are right, so the readback still outranks the failed exit.
+        assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.MANUAL))
+        assertFalse(f.store.granted)
+
+        assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.PERIODIC))
+        assertEquals(2, f.shell.commands.size)
     }
 
     @Test
