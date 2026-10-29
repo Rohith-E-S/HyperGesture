@@ -9,11 +9,11 @@
 //
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 package com.h3nc4.hypergesture.navigation
 
 import org.junit.Assert.assertEquals
@@ -42,41 +42,103 @@ class NavigationSettingTargetsTest {
             ),
         )
         assertFalse(NavigationSettingTargets.verified(mapOf("force_fsg_nav_bar" to "1")))
+        assertFalse(NavigationSettingTargets.verified(mapOf("force_fsg_nav_bar" to null, "navigation_mode" to "2")))
     }
 
     @Test
-    fun buildRecoveryScriptContainsEssentialCommands() {
-        val script = ShizukuNavigationRecovery.buildRecoveryScript("com.h3nc4.hypergesture")
-        assertTrue(script.contains("settings put global force_fsg_nav_bar 1"))
-        assertTrue(script.contains("settings put secure navigation_mode 2"))
-        assertTrue(script.contains("settings --user 0 put secure navigation_mode 2"))
-        assertTrue(script.contains("settings --user 0 put global force_fsg_nav_bar 1"))
-        assertTrue(script.contains("settings put global use_gesture_version_three 1"))
-        assertTrue(script.contains("cmd overlay disable com.android.internal.systemui.navbar.threebutton"))
+    fun theGestureFlagIsVerifiedOnlyOnHyperOs() {
+        val correct = mapOf("force_fsg_nav_bar" to "1", "navigation_mode" to "2")
+        assertTrue(NavigationSettingTargets.verified(correct))
+        // A build that does not expose the flag (null) is not a mismatch.
+        assertTrue(NavigationSettingTargets.verified(correct, includeHyperOs = true))
+        assertTrue(
+            NavigationSettingTargets.verified(
+                correct + ("use_gesture_version_three" to "1"),
+                includeHyperOs = true,
+            ),
+        )
+        assertTrue(
+            "a wrong flag is ignored when HyperOS is not requested",
+            NavigationSettingTargets.verified(correct + ("use_gesture_version_three" to "0")),
+        )
+        assertFalse(
+            NavigationSettingTargets.verified(
+                correct + ("use_gesture_version_three" to "0"),
+                includeHyperOs = true,
+            ),
+        )
+    }
+
+    @Test
+    fun theRepairScriptIsGeneratedFromTheTargets() {
+        val script = NavigationRecoveryScript.build(
+            packageName = "com.h3nc4.hypergesture",
+            includeExemptions = true,
+            hyperOs = true,
+            guard = true,
+        )
+        NavigationSettingTargets.all.forEach { target ->
+            assertTrue(script.contains("settings put ${target.namespace} ${target.key} ${target.value}"))
+            assertTrue(script.contains("settings get ${target.namespace} ${target.key}"))
+        }
         assertTrue(script.contains("appops set com.h3nc4.hypergesture 10008 allow"))
         assertTrue(script.contains("appops set com.h3nc4.hypergesture 10021 allow"))
         assertTrue(script.contains("dumpsys deviceidle whitelist +com.h3nc4.hypergesture"))
         assertTrue(script.contains("am set-standby-bucket com.h3nc4.hypergesture active"))
+        assertTrue(script.contains("use_gesture_version_three"))
+        assertFalse("the duplicate user 0 writes are gone", script.contains("--user 0"))
     }
 
     @Test
-    fun parseOutputExtractsValuesAndValidatesVerification() {
-        val goodOutput = """
-            [x] overlay disabled
-            FSG=1
-            NAV=2
-        """.trimIndent()
-        val parsedGood = ShizukuNavigationRecovery.parseOutput(goodOutput)
-        assertEquals("1", parsedGood.fsg)
-        assertEquals("2", parsedGood.nav)
-        assertTrue(parsedGood.isVerified)
+    fun exemptionFailuresAreVisibleToTheRunner() {
+        val script = NavigationRecoveryScript.build(
+            packageName = "com.h3nc4.hypergesture",
+            includeExemptions = true,
+            hyperOs = false,
+            guard = false,
+        )
+        assertTrue(script.contains("exemption_failed=0"))
+        assertTrue(script.contains("|| exemption_failed=1"))
+        assertTrue(script.contains("echo \"EXEMPTIONS=$((1 - exemption_failed))\""))
+        assertTrue(script.contains("exit \$exemption_failed"))
+        assertTrue(NavigationRecoveryScript.grantsSucceeded("noise\nEXEMPTIONS=1\n"))
+        assertFalse(NavigationRecoveryScript.grantsSucceeded("noise\nEXEMPTIONS=0\n"))
+        assertFalse(NavigationRecoveryScript.grantsSucceeded(""))
+    }
 
-        val badOutput = "FSG=0\nNAV=2"
-        val parsedBad = ShizukuNavigationRecovery.parseOutput(badOutput)
-        assertFalse(parsedBad.isVerified)
+    @Test
+    fun exemptionsAndHyperOsBitsAreOnlyAddedWhenAsked() {
+        val minimal = NavigationRecoveryScript.build(
+            packageName = "com.h3nc4.hypergesture",
+            includeExemptions = false,
+            hyperOs = false,
+            guard = true,
+        )
+        assertFalse(minimal.contains("appops"))
+        assertFalse(minimal.contains("deviceidle"))
+        assertFalse(minimal.contains("use_gesture_version_three"))
+        assertFalse(minimal.contains("cmd overlay"))
+    }
 
-        val emptyOutput = ""
-        val parsedEmpty = ShizukuNavigationRecovery.parseOutput(emptyOutput)
-        assertFalse(parsedEmpty.isVerified)
+    @Test
+    fun aForcedScriptWritesWithoutTheGuard() {
+        val forced = NavigationRecoveryScript.build(
+            packageName = "com.h3nc4.hypergesture",
+            includeExemptions = true,
+            hyperOs = false,
+            guard = false,
+        )
+        assertFalse(forced.contains("if ["))
+        assertTrue(forced.contains("settings put global force_fsg_nav_bar 1"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun aPackageNameWithShellSyntaxIsRejected() {
+        NavigationRecoveryScript.build(
+            packageName = "com.h3nc4.hypergesture; reboot",
+            includeExemptions = false,
+            hyperOs = false,
+            guard = true,
+        )
     }
 }

@@ -17,6 +17,7 @@
 
 package com.h3nc4.hypergesture.ui
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,6 +36,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.navigation.RecoveryStatus
+import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 
 @Composable
 internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifier) {
@@ -45,7 +47,8 @@ internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifi
             RecoveryStatus.SHIZUKU_UNAVAILABLE -> R.string.recovery_status_unavailable
             RecoveryStatus.PERMISSION_DENIED -> R.string.recovery_status_permission
             RecoveryStatus.VERIFIED -> R.string.recovery_status_verified
-            RecoveryStatus.WRITE_FAILED -> R.string.recovery_status_failed
+            RecoveryStatus.COMMAND_FAILED -> R.string.recovery_status_command_failed
+            RecoveryStatus.NOT_VERIFIED -> R.string.recovery_status_not_verified
         },
     )
     Card(
@@ -65,6 +68,25 @@ internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifi
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (state.enabled) {
+                        state.lastAttemptAt?.let { at ->
+                            Text(
+                                stringResource(
+                                    R.string.recovery_last_check,
+                                    // Relative time only refreshes on recomposition, and the
+                                    // model already refreshes whenever the app resumes.
+                                    DateUtils.getRelativeTimeSpanString(
+                                        at,
+                                        System.currentTimeMillis(),
+                                        DateUtils.MINUTE_IN_MILLIS,
+                                    ).toString(),
+                                    triggerLabel(state.lastTrigger),
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 Switch(
                     checked = state.enabled,
@@ -83,4 +105,16 @@ internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifi
             }
         }
     }
+}
+
+@Composable
+private fun triggerLabel(trigger: RecoveryTrigger?): String = when (trigger) {
+    RecoveryTrigger.MANUAL -> stringResource(R.string.recovery_trigger_manual)
+    RecoveryTrigger.RESUME -> stringResource(R.string.recovery_trigger_app_open)
+    RecoveryTrigger.BOOT -> stringResource(R.string.recovery_trigger_boot)
+    RecoveryTrigger.SETTINGS_OBSERVER -> stringResource(R.string.recovery_trigger_settings_change)
+    RecoveryTrigger.PREFERRED_HOME -> stringResource(R.string.recovery_trigger_launcher_change)
+    RecoveryTrigger.PACKAGE_CHANGE -> stringResource(R.string.recovery_trigger_app_change)
+    RecoveryTrigger.PERIODIC -> stringResource(R.string.recovery_trigger_periodic)
+    null -> stringResource(R.string.recovery_trigger_unknown)
 }

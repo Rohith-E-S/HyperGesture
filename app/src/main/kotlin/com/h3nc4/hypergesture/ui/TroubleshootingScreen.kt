@@ -120,7 +120,8 @@ private fun DeviceRows(diagnostics: Diagnostics, recoveryState: RecoveryState) {
                 RecoveryStatus.SHIZUKU_UNAVAILABLE -> R.string.recovery_status_unavailable
                 RecoveryStatus.PERMISSION_DENIED -> R.string.recovery_status_permission
                 RecoveryStatus.VERIFIED -> R.string.recovery_status_verified
-                RecoveryStatus.WRITE_FAILED -> R.string.recovery_status_failed
+                RecoveryStatus.COMMAND_FAILED -> R.string.recovery_status_command_failed
+                RecoveryStatus.NOT_VERIFIED -> R.string.recovery_status_not_verified
             },
         )
         ValueRow(stringResource(R.string.recovery_title), recoveryLabel)

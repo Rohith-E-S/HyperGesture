@@ -24,7 +24,8 @@ class NavigationRecoveryWorker(context: Context, parameters: WorkerParameters) :
     CoroutineWorker(context, parameters) {
 
     override suspend fun doWork(): Result {
-        NavigationRecoveryScheduler.runDirectIfEnabled(applicationContext)
+        // Await the run: returning early lets WorkManager stop the process mid-repair.
+        NavigationRecoveryRuntime.runner(applicationContext).run(RecoveryTrigger.PERIODIC)
         return Result.success()
     }
 }

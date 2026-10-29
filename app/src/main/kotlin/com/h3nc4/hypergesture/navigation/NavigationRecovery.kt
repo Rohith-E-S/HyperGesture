@@ -13,264 +13,151 @@
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with this program. If not, see <https://www.gnu.org/licenses/>.
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 package com.h3nc4.hypergesture.navigation
 
 import android.content.Context
-import android.content.pm.PackageManager
-import android.database.ContentObserver
-import android.net.Uri
-import android.os.Handler
-import android.provider.Settings
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
-import rikka.shizuku.Shizuku
-import java.lang.reflect.Method
 import java.util.concurrent.TimeUnit
 
 private val Context.navigationRecoveryStore by preferencesDataStore("navigation_recovery")
 
+/** Not on Android 8+'s manifest-receiver whitelist, so it is registered at runtime. */
+internal const val ACTION_PREFERRED_ACTIVITY_CHANGED = "android.intent.action.ACTION_PREFERRED_ACTIVITY_CHANGED"
+
+/** HyperOS's watchdog resets the settings shortly after the broadcast that wakes it. */
+internal const val WATCHDOG_GRACE_MS = 1_500L
+
 enum class RecoveryStatus {
-    DISABLED, SHIZUKU_UNAVAILABLE, PERMISSION_DENIED, VERIFIED, WRITE_FAILED
+    DISABLED,
+    SHIZUKU_UNAVAILABLE,
+    PERMISSION_DENIED,
+    VERIFIED,
+
+    /** The shell could not run the repair, timed out, or exited non-zero. */
+    COMMAND_FAILED,
+
+    /** The shell ran, but reading the settings back did not show the expected values. */
+    NOT_VERIFIED,
+}
+
+enum class RecoveryTrigger {
+    MANUAL,
+    RESUME,
+    BOOT,
+    SETTINGS_OBSERVER,
+    PREFERRED_HOME,
+    PACKAGE_CHANGE,
+    PERIODIC,
 }
 
 data class RecoveryState(
     val enabled: Boolean = false,
     val status: RecoveryStatus = RecoveryStatus.DISABLED,
+    val lastAttemptAt: Long? = null,
+    val lastTrigger: RecoveryTrigger? = null,
 )
 
-class NavigationRecoveryRepository(private val context: Context) {
+/** What the runner needs from storage; tests implement this without DataStore. */
+internal interface RecoveryStore {
+
+    suspend fun isEnabled(): Boolean
+
+    suspend fun record(status: RecoveryStatus, trigger: RecoveryTrigger, at: Long)
+
+    /** False until the app-ops and battery exemptions have been granted by a forced run. */
+    suspend fun exemptionsGranted(): Boolean
+
+    suspend fun markExemptionsGranted(granted: Boolean)
+}
+
+internal class NavigationRecoveryRepository(private val context: Context) : RecoveryStore {
+
     val state: Flow<RecoveryState> = context.navigationRecoveryStore.data.map { preferences ->
         RecoveryState(
             enabled = preferences[ENABLED] ?: false,
-            status = preferences[STATUS]?.let { name ->
-                RecoveryStatus.entries.firstOrNull { it.name == name }
-            } ?: RecoveryStatus.DISABLED,
+            status = decodeRecoveryStatus(preferences[STATUS]),
+            lastAttemptAt = preferences[LAST_ATTEMPT_AT],
+            lastTrigger = decodeRecoveryTrigger(preferences[LAST_TRIGGER]),
         )
     }
 
-    suspend fun isEnabled() = state.first().enabled
+    override suspend fun isEnabled(): Boolean = state.first().enabled
 
     suspend fun setEnabled(enabled: Boolean) {
         context.navigationRecoveryStore.edit { it[ENABLED] = enabled }
         if (enabled) {
             NavigationRecoveryScheduler.schedulePeriodic(context)
-            NavigationRecoveryScheduler.runDirectIfEnabled(context)
         } else {
-            WorkManager.getInstance(context).cancelUniqueWork(NavigationRecoveryScheduler.PERIODIC_WORK)
-            setStatus(RecoveryStatus.DISABLED)
+            NavigationRecoveryScheduler.cancelPeriodic(context)
+            record(RecoveryStatus.DISABLED, RecoveryTrigger.MANUAL, System.currentTimeMillis())
+            // A later enable must grant the exemptions again, not trust the old grants.
+            markExemptionsGranted(false)
         }
     }
 
-    suspend fun setStatus(status: RecoveryStatus) {
-        context.navigationRecoveryStore.edit { it[STATUS] = status.name }
+    override suspend fun record(status: RecoveryStatus, trigger: RecoveryTrigger, at: Long) {
+        context.navigationRecoveryStore.edit { preferences ->
+            preferences[LAST_ATTEMPT_AT] = at
+            preferences[LAST_TRIGGER] = trigger.name
+            preferences[STATUS] = status.name
+        }
+    }
+
+    override suspend fun exemptionsGranted(): Boolean =
+        context.navigationRecoveryStore.data.first()[EXEMPTIONS_GRANTED] ?: false
+
+    override suspend fun markExemptionsGranted(granted: Boolean) {
+        context.navigationRecoveryStore.edit { it[EXEMPTIONS_GRANTED] = granted }
     }
 
     private companion object {
         val ENABLED = booleanPreferencesKey("enabled")
         val STATUS = stringPreferencesKey("status")
+        val LAST_ATTEMPT_AT = longPreferencesKey("last_attempt_at")
+        val LAST_TRIGGER = stringPreferencesKey("last_trigger")
+        val EXEMPTIONS_GRANTED = booleanPreferencesKey("exemptions_granted")
     }
 }
 
+/**
+ * Builds shipped with [RecoveryStatus.WRITE_FAILED], which did not distinguish a shell
+ * failure from a write that did not stick; those records read as [RecoveryStatus.COMMAND_FAILED].
+ */
+internal fun decodeRecoveryStatus(name: String?): RecoveryStatus = when (name) {
+    null -> RecoveryStatus.DISABLED
+    "WRITE_FAILED" -> RecoveryStatus.COMMAND_FAILED
+    else -> RecoveryStatus.entries.firstOrNull { it.name == name } ?: RecoveryStatus.DISABLED
+}
+
+internal fun decodeRecoveryTrigger(name: String?): RecoveryTrigger? =
+    name?.let { stored -> RecoveryTrigger.entries.firstOrNull { it.name == stored } }
+
 object NavigationRecoveryScheduler {
     const val PERIODIC_WORK = "navigation-recovery-periodic"
-    private val executionMutex = Mutex()
 
     fun schedulePeriodic(context: Context) {
         val request = PeriodicWorkRequestBuilder<NavigationRecoveryWorker>(15, TimeUnit.MINUTES).build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             PERIODIC_WORK,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            // KEEP: reopening the app or rebinding the service must not push the window back.
+            ExistingPeriodicWorkPolicy.KEEP,
             request,
         )
     }
 
-    /**
-     * Executes Shizuku recovery directly without waiting for asynchronous WorkManager queues.
-     * Guarded by a Mutex to prevent overlapping shell executions.
-     */
-    suspend fun runDirectIfEnabled(context: Context): RecoveryStatus? {
-        val repository = NavigationRecoveryRepository(context)
-        if (!repository.isEnabled()) return null
-        return executionMutex.withLock {
-            if (!repository.isEnabled()) return@withLock null
-            val status = ShizukuNavigationRecovery.run(context)
-            repository.setStatus(status)
-            status
-        }
-    }
-}
-
-/**
- * Monitors navigation settings in real time via ContentObserver.
- * Immediately triggers direct recovery when HyperOS or SystemUI resets force_fsg_nav_bar or navigation_mode.
- */
-class NavigationSettingsObserver(
-    private val context: Context,
-    handler: Handler? = null,
-) : ContentObserver(handler) {
-    override fun onChange(selfChange: Boolean, uri: Uri?) {
-        val cr = context.contentResolver
-        val fsg = Settings.Global.getString(cr, "force_fsg_nav_bar")
-        val nav = Settings.Secure.getString(cr, "navigation_mode")
-        if (fsg != "1" || nav != "2") {
-            CoroutineScope(Dispatchers.IO).launch {
-                NavigationRecoveryScheduler.runDirectIfEnabled(context)
-            }
-        }
-    }
-
-    fun register() {
-        runCatching {
-            val cr = context.contentResolver
-            cr.registerContentObserver(
-                Settings.Global.getUriFor("force_fsg_nav_bar"),
-                false,
-                this,
-            )
-            cr.registerContentObserver(
-                Settings.Secure.getUriFor("navigation_mode"),
-                false,
-                this,
-            )
-        }
-    }
-
-    fun unregister() {
-        runCatching {
-            context.contentResolver.unregisterContentObserver(this)
-        }
-    }
-}
-
-/** Fixed allow-list: recovery targets the settings required for full-screen gestures. */
-internal object NavigationSettingTargets {
-    val all = listOf(
-        SettingTarget("global", "force_fsg_nav_bar", "1"),
-        SettingTarget("secure", "navigation_mode", "2"),
-    )
-
-    fun verified(values: Map<String, String>) = all.all { values[it.key] == it.value }
-}
-
-internal data class SettingTarget(val namespace: String, val key: String, val value: String)
-
-internal data class ParsedRecoveryOutput(
-    val fsg: String?,
-    val nav: String?,
-) {
-    val isVerified: Boolean get() = fsg == "1" && nav == "2"
-}
-
-internal object ShizukuShell {
-    private var newProcessMethod: Method? = null
-
-    fun exec(command: String, timeoutSeconds: Long = 8): CommandResult {
-        if (!Shizuku.pingBinder()) {
-            return CommandResult(exitCode = -1, output = "Shizuku binder not responding")
-        }
-        val method = newProcessMethod ?: synchronized(this) {
-            newProcessMethod ?: Shizuku::class.java.getDeclaredMethod(
-                "newProcess",
-                Array<String>::class.java,
-                Array<String>::class.java,
-                String::class.java,
-            ).apply { isAccessible = true }.also { newProcessMethod = it }
-        }
-
-        val cmd = arrayOf("sh", "-c", command)
-        val process = method.invoke(null, cmd, null, null) as Process
-        val completed = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-        if (!completed) {
-            process.destroyForcibly()
-            return CommandResult(exitCode = -1, output = "Execution timed out")
-        }
-        val output = process.inputStream.bufferedReader().use { it.readText() } +
-            process.errorStream.bufferedReader().use { it.readText() }
-        return CommandResult(exitCode = process.exitValue(), output = output.trim())
-    }
-}
-
-internal data class CommandResult(val exitCode: Int, val output: String)
-
-object ShizukuNavigationRecovery {
-
-    fun buildRecoveryScript(packageName: String): String = """
-        settings put global force_fsg_nav_bar 1
-        settings put secure navigation_mode 2
-        settings --user 0 put secure navigation_mode 2 2>/dev/null || true
-        settings --user 0 put global force_fsg_nav_bar 1 2>/dev/null || true
-        settings put global use_gesture_version_three 1 2>/dev/null || true
-        if cmd overlay list 2>/dev/null | grep -q '\[x\] com.android.internal.systemui.navbar.threebutton'; then
-            cmd overlay disable com.android.internal.systemui.navbar.threebutton 2>/dev/null || true
-        fi
-        appops set $packageName 10008 allow 2>/dev/null || true
-        appops set $packageName 10021 allow 2>/dev/null || true
-        appops set $packageName android:get_usage_stats allow 2>/dev/null || true
-        dumpsys deviceidle whitelist +$packageName 2>/dev/null || true
-        am set-standby-bucket $packageName active 2>/dev/null || true
-        echo "FSG=$(settings get global force_fsg_nav_bar 2>/dev/null)"
-        echo "NAV=$(settings get secure navigation_mode 2>/dev/null)"
-    """.trimIndent()
-
-    suspend fun run(context: Context): RecoveryStatus {
-        if (!Shizuku.pingBinder()) return RecoveryStatus.SHIZUKU_UNAVAILABLE
-        try {
-            if (Shizuku.isPreV11() || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                return RecoveryStatus.PERMISSION_DENIED
-            }
-        } catch (_: Exception) {
-            return RecoveryStatus.SHIZUKU_UNAVAILABLE
-        }
-
-        return try {
-            withContext(Dispatchers.IO) {
-                val script = buildRecoveryScript(context.packageName)
-                val result = ShizukuShell.exec(script)
-                if (result.exitCode != 0) {
-                    RecoveryStatus.WRITE_FAILED
-                } else {
-                    val parsed = parseOutput(result.output)
-                    if (parsed.isVerified) RecoveryStatus.VERIFIED else RecoveryStatus.WRITE_FAILED
-                }
-            }
-        } catch (error: CancellationException) {
-            if (!currentCoroutineContext().isActive) throw error
-            if (!Shizuku.pingBinder()) RecoveryStatus.SHIZUKU_UNAVAILABLE else RecoveryStatus.WRITE_FAILED
-        } catch (_: Exception) {
-            if (!Shizuku.pingBinder()) RecoveryStatus.SHIZUKU_UNAVAILABLE else RecoveryStatus.WRITE_FAILED
-        }
-    }
-
-    internal fun parseOutput(output: String): ParsedRecoveryOutput {
-        var fsg: String? = null
-        var nav: String? = null
-        for (line in output.lines()) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("FSG=")) {
-                fsg = trimmed.substringAfter("FSG=").trim()
-            } else if (trimmed.startsWith("NAV=")) {
-                nav = trimmed.substringAfter("NAV=").trim()
-            }
-        }
-        return ParsedRecoveryOutput(fsg, nav)
+    fun cancelPeriodic(context: Context) {
+        WorkManager.getInstance(context).cancelUniqueWork(PERIODIC_WORK)
     }
 }

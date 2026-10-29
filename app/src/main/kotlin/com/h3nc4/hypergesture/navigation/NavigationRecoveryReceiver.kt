@@ -20,44 +20,25 @@ package com.h3nc4.hypergesture.navigation
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
- * Listens for package and default launcher changes that trigger HyperOS SystemUI's
- * PhoneStateMonitorController watchdog. Re-applies navigation settings immediately and
- * runs a delayed second check to ensure the asynchronous watchdog did not reset them.
+ * Only `MY_PACKAGE_REPLACED` reaches this static receiver: the other package actions and
+ * `ACTION_PREFERRED_ACTIVITY_CHANGED` are implicit broadcasts that a manifest receiver
+ * cannot receive on Android 8+. They are registered at runtime in the accessibility
+ * service instead.
  */
 class NavigationRecoveryReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val action = intent.action ?: return
-        if (action != ACTION_PREFERRED_ACTIVITY_CHANGED &&
-            action != Intent.ACTION_PACKAGE_ADDED &&
-            action != Intent.ACTION_PACKAGE_CHANGED &&
-            action != Intent.ACTION_PACKAGE_REMOVED &&
-            action != Intent.ACTION_PACKAGE_REPLACED &&
-            action != Intent.ACTION_MY_PACKAGE_REPLACED
-        ) return
+        if (!shouldHandle(intent.action)) return
 
         val pending = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                // Immediate direct check via Shizuku (<50ms)
-                NavigationRecoveryScheduler.runDirectIfEnabled(context)
-                // Watchdog debounce: HyperOS SystemUI PhoneStateMonitor posts an asynchronous
-                // runnable when default home or packages change, which resets force_fsg_nav_bar=0.
-                // Delay 1.5 seconds and trigger a direct second check to guarantee the setting sticks.
-                delay(1500)
-                NavigationRecoveryScheduler.runDirectIfEnabled(context)
-            } finally {
-                pending.finish()
-            }
-        }
-    }
-
-    private companion object {
-        const val ACTION_PREFERRED_ACTIVITY_CHANGED = "android.intent.action.ACTION_PREFERRED_ACTIVITY_CHANGED"
+        val runner = NavigationRecoveryRuntime.runner(context.applicationContext)
+        // Force: a self-update is exactly when the vendor watchdog rewrites the settings.
+        runner.launch(RecoveryTrigger.PACKAGE_CHANGE, force = true)
+            .invokeOnCompletion { pending.finish() }
+        // Best effort: the delayed pass is not awaited, so goAsync stays well under 10 s.
+        runner.launch(RecoveryTrigger.PACKAGE_CHANGE, delayMs = WATCHDOG_GRACE_MS)
     }
 }
+
+internal fun shouldHandle(action: String?): Boolean = action == Intent.ACTION_MY_PACKAGE_REPLACED
