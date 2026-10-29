@@ -124,21 +124,14 @@
             </intent-filter>
         </receiver>
 
+        <!-- Only the self-update action reaches a manifest receiver on Android 8+. The
+             package and preferred-home actions are implicit broadcasts, registered at
+             runtime by the accessibility service while it is bound. -->
         <receiver
             android:name=".navigation.NavigationRecoveryReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="android.intent.action.PACKAGE_ADDED" />
-                <action android:name="android.intent.action.PACKAGE_CHANGED" />
-                <action android:name="android.intent.action.PACKAGE_REMOVED" />
-                <action android:name="android.intent.action.PACKAGE_REPLACED" />
-                <data android:scheme="package" />
-            </intent-filter>
-            <intent-filter>
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.ACTION_PREFERRED_ACTIVITY_CHANGED" />
             </intent-filter>
         </receiver>
     </application>

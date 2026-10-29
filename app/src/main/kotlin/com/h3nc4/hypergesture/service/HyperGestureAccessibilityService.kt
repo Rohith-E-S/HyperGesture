@@ -23,8 +23,10 @@ package com.h3nc4.hypergesture.service
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Path
 import android.hardware.display.DisplayManager
@@ -35,13 +37,17 @@ import android.view.Display
 import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
+import androidx.core.content.ContextCompat
 import com.h3nc4.hypergesture.diagnostics.FailureLog
 import com.h3nc4.hypergesture.gesture.GestureAction
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
 import com.h3nc4.hypergesture.gesture.PlatformDefaults
 import com.h3nc4.hypergesture.gesture.ScreenEdge
 import com.h3nc4.hypergesture.gesture.TouchSample
+import com.h3nc4.hypergesture.navigation.ACTION_PREFERRED_ACTIVITY_CHANGED
+import com.h3nc4.hypergesture.navigation.NavigationRecoveryScheduler
 import com.h3nc4.hypergesture.navigation.NavigationSettingsObserver
+import com.h3nc4.hypergesture.navigation.WATCHDOG_GRACE_MS
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
 import com.h3nc4.hypergesture.setup.GestureTileService
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -49,6 +55,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -80,6 +87,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     private var configuration: GestureConfiguration = GestureConfiguration()
     private var lastGeometry: ScreenGeometry? = null
     private var navigationObserver: NavigationSettingsObserver? = null
+    private var triggerReceivers: List<BroadcastReceiver> = emptyList()
 
     /**
      * Rotation reaches the display *after* the configuration change lands, so
@@ -125,6 +133,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             .registerDisplayListener(displayListener, handler)
 
         navigationObserver = NavigationSettingsObserver(this, handler).also { it.register() }
+        triggerReceivers = registerTriggerReceivers()
 
         scope.launch {
             settings.configuration.collect { updated ->
@@ -148,6 +157,42 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         reinstallIfGeometryChanged()
+    }
+
+    /**
+     * Package and preferred-home broadcasts never reach manifest receivers on Android 8+,
+     * so they are registered here for as long as the service that needs them is bound.
+     * The second pass catches the HyperOS watchdog, which resets the settings after the
+     * broadcast that wakes it.
+     */
+    private fun registerTriggerReceivers(): List<BroadcastReceiver> {
+        fun receiver() = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                scope.launch(Dispatchers.IO) {
+                    NavigationRecoveryScheduler.runDirectIfEnabled(this@HyperGestureAccessibilityService)
+                    delay(WATCHDOG_GRACE_MS)
+                    NavigationRecoveryScheduler.runDirectIfEnabled(this@HyperGestureAccessibilityService)
+                }
+            }
+        }
+        val preferredHome = receiver()
+        val packages = receiver()
+        ContextCompat.registerReceiver(
+            this,
+            preferredHome,
+            IntentFilter(ACTION_PREFERRED_ACTIVITY_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+        val packageFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_CHANGED)
+            addAction(Intent.ACTION_PACKAGE_REMOVED)
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
+            // Without the scheme this filter matches none of the package intents.
+            addDataScheme("package")
+        }
+        ContextCompat.registerReceiver(this, packages, packageFilter, ContextCompat.RECEIVER_EXPORTED)
+        return listOf(preferredHome, packages)
     }
 
     /** No events are requested in `accessibility_service_config.xml`. */
@@ -191,6 +236,8 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         }
         navigationObserver?.unregister()
         navigationObserver = null
+        triggerReceivers.forEach { runCatching { unregisterReceiver(it) } }
+        triggerReceivers = emptyList()
         overlay?.remove()
         overlay = null
         handler.removeCallbacksAndMessages(null)

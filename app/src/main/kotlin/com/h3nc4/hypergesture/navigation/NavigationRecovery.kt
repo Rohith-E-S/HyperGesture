@@ -48,6 +48,12 @@ import java.util.concurrent.TimeUnit
 
 private val Context.navigationRecoveryStore by preferencesDataStore("navigation_recovery")
 
+/** Not on Android 8+'s manifest-receiver whitelist, so it is registered at runtime. */
+internal const val ACTION_PREFERRED_ACTIVITY_CHANGED = "android.intent.action.ACTION_PREFERRED_ACTIVITY_CHANGED"
+
+/** HyperOS's watchdog resets the settings shortly after the broadcast that wakes it. */
+internal const val WATCHDOG_GRACE_MS = 1_500L
+
 enum class RecoveryStatus {
     DISABLED, SHIZUKU_UNAVAILABLE, PERMISSION_DENIED, VERIFIED, WRITE_FAILED
 }
