@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Copyright (C) 2026  Henrique Almeida <me@h3nc4.com>
+  Copyright (C) 2026  Victor Eduardo (@victoresidoro)
+
+  This file is part of HyperGesture.
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+-->
+<resources>
+    <string name="app_name">HyperGesture</string>
+
+    <!-- Shown by the system in the accessibility settings list. -->
+    <string name="accessibility_service_description">Recognises swipes from the screen edges and performs Back, Home and Recents. The service is for navigation alone, and it doesn\'t read screen content or keystrokes or send anything off your device. The app itself contacts GitHub only if you turn on its update check.</string>
+    <string name="accessibility_service_summary">Edge gesture navigation</string>
+
+    <!-- Status, the first thing on home. The tile reuses the two short ones. -->
+    <string name="status_active">Active</string>
+    <string name="status_inactive">Not running</string>
+    <string name="status_off">Gestures are off</string>
+    <string name="status_off_body">Turn HyperGesture on in Accessibility to start.</string>
+    <string name="status_restricted_hint">Switch greyed out? Allow restricted settings in App info first.</string>
+    <string name="status_stopped">Gestures stopped</string>
+    <string name="status_stopped_body">The switch is on, but the service is not running. Turn it off and on again.</string>
+    <string name="status_working">Gestures are on</string>
+    <string name="status_working_body">Back from the sides, Home and Recents from the bottom.</string>
+    <string name="status_working_body_left">Back from the left side, Home and Recents from the bottom.</string>
+    <string name="status_working_body_right">Back from the right side, Home and Recents from the bottom.</string>
+    <string name="status_working_body_bottom">Home and Recents from the bottom.</string>
+    <string name="action_turn_on">Turn on</string>
+    <string name="action_fix">Fix</string>
+
+    <!-- Setup checklist. -->
+    <string name="section_setup">Setup</string>
+    <plurals name="setup_progress">
+        <item quantity="one">Setup, %1$d of %2$d done</item>
+        <item quantity="other">Setup, %1$d of %2$d done</item>
+    </plurals>
+    <plurals name="setup_recommended_left">
+        <item quantity="one">%1$d recommended step left</item>
+        <item quantity="other">%1$d recommended steps left</item>
+    </plurals>
+    <string name="setup_group_required">Required</string>
+    <string name="setup_group_recommended">Recommended</string>
+    <string name="setup_footer_hyperos">HyperOS stops background apps it does not know. These steps keep HyperGesture running.</string>
+    <string name="setup_footer">These steps keep HyperGesture running.</string>
+    <string name="chip_done">Done</string>
+    <string name="chip_to_do">To do</string>
+    <string name="chip_check">Check</string>
+    <string name="chip_locked">Locked</string>
+    <string name="chip_unavailable">Not available</string>
+    <string name="action_i_did_it">I did it</string>
+    <string name="step_confirmed">Marked done by you</string>
+    <string name="action_undo">Undo</string>
+    <string name="step_waits_on_accessibility">Turn on accessibility first</string>
+    <string name="step_waits_on_tile">Add the tile first</string>
+    <string name="step_restricted">Allow restricted settings</string>
+    <string name="step_restricted_body">In App info, open the menu and allow restricted settings. The Accessibility switch is greyed out until then.</string>
+    <string name="step_accessibility">Turn on accessibility</string>
+    <string name="step_accessibility_body">Needed for every gesture</string>
+    <string name="step_accessibility_stopped">On, but stopped</string>
+    <string name="step_accessibility_done">On and running</string>
+    <string name="step_battery">Battery: no restrictions</string>
+    <string name="step_battery_body">Set Power or Battery to No restrictions in App info.</string>
+    <string name="step_autostart">Autostart</string>
+    <string name="step_autostart_body">Lets HyperOS start the gestures again after a reboot.</string>
+    <string name="action_open_autostart">Autostart</string>
+    <string name="action_open_app_info">App info</string>
+
+    <!-- Capability 2: the HyperOS navigation integration. -->
+    <string name="step_navigation_bar">Hide navigation bar</string>
+    <string name="step_navigation_bar_body">Reclaims its screen space. Gestures work either way.</string>
+    <string name="step_navigation_bar_done">Hidden</string>
+    <string name="status_navigation_unavailable_body">This device offers no way for an app to change the navigation bar. Your gestures work regardless.</string>
+    <string name="action_open_navigation_settings">Open navigation settings</string>
+    <string name="outcome_launched">Opened navigation settings. Choose gesture navigation to hide the bar.</string>
+    <string name="outcome_unsupported">Not supported on this device. This is a platform restriction, not a HyperGesture problem.</string>
+    <string name="outcome_failed">Could not open the screen: %1$s</string>
+
+    <string name="recovery_title">Navigation setting recovery (Shizuku)</string>
+    <string name="recovery_status_disabled">Off. Current navigation settings are left unchanged.</string>
+    <string name="recovery_status_unavailable">Shizuku is stopped or unavailable. Start it, then return to HyperGesture.</string>
+    <string name="recovery_status_permission">Shizuku permission is missing. Grant it to HyperGesture in Shizuku.</string>
+    <string name="recovery_status_verified">Active. Gestural mode verified (force_fsg=1, nav_mode=2), 3-button overlay suppressed, and MIUI cleaner immunity granted.</string>
+    <string name="recovery_status_failed">A setting write failed or did not read back correctly on this build. The manual navigation settings route remains available.</string>
+    <string name="recovery_explanation">Maintains full-screen gestures across launcher changes, suppresses conflicting 3-button overlays, and grants MIUI Autostart &amp; Battery immunity so HyperOS never kills your gestures.</string>
+    <string name="recovery_request_permission">Request Shizuku permission</string>
+
+    <!-- Control Center tile. -->
+    <string name="step_tile">Control Center tile</string>
+    <string name="step_tile_body">Your way back if gestures stop</string>
+    <string name="step_tile_done">In Control Center</string>
+    <string name="action_add_tile">Add</string>
+    <string name="tile_add_added">Tile added to Control Center.</string>
+    <string name="tile_add_already">The tile is already in Control Center.</string>
+    <string name="tile_add_dismissed">The tile was left out. Tap Add again, or add it by editing Control Center.</string>
+    <string name="tile_add_refused">This device refused to add the tile (code %1$d). Add it by editing Control Center.</string>
+    <string name="tile_add_failed">Could not ask to add the tile: %1$s. Add it by editing Control Center.</string>
+    <string name="tile_add_unsupported">This Android version cannot offer to add the tile. Add it by editing Control Center.</string>
+
+    <!-- Home. -->
+    <string name="section_features">Features</string>
+    <string name="section_more">More</string>
+    <string name="feature_on">On</string>
+    <string name="feature_off">Off</string>
+    <string name="feature_needs_usage_access">Needs usage access</string>
+    <string name="feature_needs_assistant">Needs Google as assistant</string>
+    <string name="action_navigate_up">Back</string>
+
+    <!-- App switching. -->
+    <string name="section_app_switch">App switching</string>
+    <string name="label_app_switch">Use app switching</string>
+    <string name="section_app_switch_body">Swipe sideways along the bottom edge to move between recent apps.</string>
+    <string name="label_usage_access">Usage access</string>
+    <string name="label_usage_access_granted">Granted</string>
+    <string name="label_usage_access_missing">Needed to switch apps</string>
+    <string name="action_grant_usage_access">Grant</string>
+    <string name="section_needs">Needs</string>
+    <string name="section_timing">Timing</string>
+    <string name="section_gestures_it_adds">Gestures it adds</string>
+    <string name="label_last_problem">Last problem</string>
+
+    <!-- Circle to Search. -->
+    <string name="section_circle_to_search">Circle to Search</string>
+    <string name="label_circle_to_search">Use Circle to Search</string>
+    <string name="section_circle_to_search_body">Hold still on the middle of the bottom edge, as on the system gesture handle.</string>
+    <string name="label_circle_to_search_system_timing">Use system delay</string>
+    <string name="label_circle_to_search_hold">Hold time</string>
+    <string name="label_assistant">Google as assistant</string>
+    <string name="assistant_google">Set</string>
+    <string name="assistant_other">Not set</string>
+    <string name="label_circle_to_search_assistant">Needs Google as the default digital assistant app.</string>
+    <string name="action_open_assistant_settings">Assistant settings</string>
+    <string name="toast_circle_to_search_failed">Circle to Search did not start. Check that Google is the default digital assistant app.</string>
+
+    <!-- Gesture settings. -->
+    <string name="section_gestures">Gesture settings</string>
+    <string name="gesture_settings_summary">Edge %1$d dp, side %2$d dp, bottom %3$d dp</string>
+    <string name="gestures_title">Your gestures</string>
+    <string name="gesture_back_name">Back</string>
+    <string name="gesture_back_how">Swipe in from either side</string>
+    <string name="gesture_back_left_how">Swipe in from the left side</string>
+    <string name="gesture_back_right_how">Swipe in from the right side</string>
+    <string name="gesture_home_recents_name">Home and Recents</string>
+    <string name="gesture_home_recents_how">Swipe up from the bottom, or swipe up and hold</string>
+    <string name="gesture_switch_apps_name">Previous and next app</string>
+    <string name="gesture_switch_apps_how">Swipe right or left along the bottom edge</string>
+    <string name="gesture_previous_app_name">Previous app</string>
+    <string name="gesture_previous_app_how">Swipe right along the bottom edge</string>
+    <string name="gesture_next_app_name">Next app</string>
+    <string name="gesture_next_app_how">Swipe left along the bottom edge</string>
+    <string name="gesture_circle_to_search_name">Circle to Search</string>
+    <string name="gesture_circle_to_search_how">Hold still on the middle of the bottom edge</string>
+    <string name="section_edges">Edges</string>
+    <string name="label_edge_width">Edge width</string>
+    <string name="label_left_edge_back">Left edge</string>
+    <string name="label_right_edge_back">Right edge</string>
+    <string name="label_landscape_confirm">Confirm in landscape</string>
+    <string name="label_landscape_confirm_body">Swipe up twice to leave a landscape app</string>
+    <string name="section_distance_and_timing">Distance and timing</string>
+    <string name="label_side_distance">Side swipe</string>
+    <string name="label_bottom_distance">Bottom swipe</string>
+    <string name="label_recents_hold">Hold for Recents</string>
+    <string name="label_maximum_duration">Time to start a swipe</string>
+    <string name="section_feedback">Feedback</string>
+    <string name="label_haptics">Vibrate</string>
+    <string name="value_dp">%1$d dp</string>
+    <string name="value_ms">%1$d ms</string>
+    <string name="action_reset_defaults">Reset to defaults</string>
+    <string name="snackbar_reset">Gesture settings reset</string>
+
+    <!-- Update check. Off by default, and the only code that touches the network. -->
+    <string name="update_switch">Check for updates</string>
+    <string name="update_switch_body">Asks GitHub for the latest release once a day as you open the app.</string>
+    <string name="section_updates">Updates</string>
+    <string name="update_summary_up_to_date">Up to date</string>
+    <string name="update_summary_available">Update available (%1$s)</string>
+    <string name="update_summary_checking">Checking…</string>
+    <string name="update_summary_no_network">No connection</string>
+    <string name="update_summary_rate_limited">GitHub is limiting requests</string>
+    <string name="update_summary_http_error">GitHub answered HTTP %1$d</string>
+    <string name="update_summary_bad_response">Unreadable answer from GitHub</string>
+    <string name="update_summary_no_apk">%1$s has no APK yet</string>
+    <string name="update_summary_nothing_published">No release yet</string>
+    <string name="update_summary_unreadable_version">Could not compare versions</string>
+    <string name="update_status">Latest release</string>
+    <string name="update_not_checked">Not checked yet</string>
+    <string name="update_check_now">Check now</string>
+    <string name="update_download_install">Download and install</string>
+    <string name="update_allow_installs">Allow installs</string>
+    <string name="update_last_checked">Last checked %1$s</string>
+    <string name="update_checking">Asking GitHub for the newest release…</string>
+    <string name="update_up_to_date">Up to date. You have %1$s and the newest release is %2$s.</string>
+    <string name="update_available">%1$s is available. You have %2$s.</string>
+    <string name="update_no_apk">Release %1$s has no APK attached, so there is nothing to install yet.</string>
+    <string name="update_nothing_published">GitHub doesn\'t list a published release yet.</string>
+    <string name="update_unreadable_version">Could not compare versions, because %1$s is not a version number.</string>
+    <string name="update_no_network">Could not reach GitHub (%1$s). Check the connection and try again.</string>
+    <string name="update_rate_limited">GitHub is limiting requests from this network. Try again later.</string>
+    <string name="update_rate_limited_until">GitHub is limiting requests from this network. Try again after %1$s.</string>
+    <string name="update_http_error">GitHub answered with HTTP %1$d. Try again later.</string>
+    <string name="update_bad_response">GitHub sent an answer this app could not read (%1$s).</string>
+    <string name="update_downloading">Downloading %1$s…</string>
+    <string name="update_permission_needed">Android needs your permission before HyperGesture can install an update. Allow it, come back here, and the download starts.</string>
+    <string name="update_confirming">Confirm the update in the system prompt.</string>
+    <string name="update_checksum_mismatch">The download did not match the checksum GitHub published, so it was deleted and nothing was installed.</string>
+    <string name="update_blocked_host">The download was redirected to %1$s, which is not a GitHub host, so it was stopped.</string>
+    <string name="update_download_failed">The download failed (%1$s). Try again.</string>
+    <string name="update_install_failed">The update did not install (%1$s).</string>
+    <string name="update_signature_conflict">Android refused the update, because it is signed with a different key from this copy (%1$s).</string>
+    <string name="update_declined">The update was cancelled in the system prompt, and this copy stays as it was.</string>
+    <string name="update_installed">Update installed.</string>
+
+
+    <!-- Troubleshooting. Local only, never transmitted. -->
+    <string name="section_troubleshooting">Troubleshooting</string>
+    <string name="section_known_fixes">Known fixes</string>
+    <string name="fix_stopped_title">Gestures stopped after an update</string>
+    <string name="fix_stopped_body">Turn the service off and on</string>
+    <string name="fix_greyed_out_title">Switch greyed out</string>
+    <string name="fix_greyed_out_body">Allow restricted settings</string>
+    <string name="action_open">Open</string>
+    <string name="section_this_device">This device</string>
+    <string name="section_last_problems">Last problems</string>
+    <string name="action_refresh_diagnostics">Refresh</string>
+    <string name="diag_android_version">Android version</string>
+    <string name="diag_device">Device</string>
+    <string name="diag_hyperos">HyperOS / MIUI build</string>
+    <string name="diag_navigation_mode">Navigation mode</string>
+    <string name="diag_service_enabled">Service switched on</string>
+    <string name="diag_service_bound">Service bound</string>
+    <string name="diag_service_running">Service running</string>
+    <string name="diag_integration">Navigation integration</string>
+    <string name="diag_last_failure">Last failure</string>
+    <string name="label_last_app_switch_failure">Last app switch problem</string>
+    <string name="diag_last_circle_to_search_failure">Last Circle to Search problem</string>
+    <string name="diag_recorded_failure">Recorded failure</string>
+    <string name="diag_none">None</string>
+    <string name="diag_unknown">Unknown</string>
+    <string name="value_yes">Yes</string>
+    <string name="value_no">No</string>
+    <string name="value_android_version">%1$s (API %2$d)</string>
+    <string name="value_navigation_gestural">Gestures</string>
+    <string name="value_navigation_buttons">Buttons</string>
+    <string name="integration_hyperos">HyperOS</string>
+    <string name="integration_generic">Generic Android</string>
+    <string name="diag_local_only">Everything here stays on your device.</string>
+
+    <!-- About. -->
+    <string name="section_about">About</string>
+    <string name="about_version">Version</string>
+    <string name="about_version_summary">Version %1$s</string>
+    <string name="diag_license">License</string>
+    <string name="value_license" translatable="false">GPL-3.0-or-later</string>
+    <string name="section_credits">Credits</string>
+    <string name="credit_victor" translatable="false">Victor Eduardo</string>
+    <string name="credit_victor_body">Circle to Search, Control Center tile</string>
+    <string name="credit_cts" translatable="false">MiCTS, CTSLauncher</string>
+    <string name="credit_cts_body">How Circle to Search is started</string>
+    <string name="url_license" translatable="false">https://github.com/Rohith-E-S/HyperGesture/blob/main/LICENSE</string>
+</resources>

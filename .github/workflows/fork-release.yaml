@@ -1,0 +1,98 @@
+# Signed releases for Rohith-E-S/HyperGesture.
+# Publishes a release for every code commit on main, built on a hosted runner.
+
+name: Fork Release
+
+on:
+  push:
+    branches:
+      - "main"
+    # Documentation and CI-only pushes do not change the app, so they ship nothing.
+    paths:
+      - "app/**"
+      - "gradle/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fork-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, verify and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # release notes and the previous version tag need history
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install SDK packages
+        run: sdkmanager --install "platforms;android-37.0" "build-tools;37.0.0" "platform-tools"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Restore the release keystore
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          test -n "${ANDROID_KEYSTORE_B64}" || { echo '::error::ANDROID_KEYSTORE_B64 is unset'; exit 1; }
+          printf '%s' "${ANDROID_KEYSTORE_B64}" | base64 --decode >android.keystore
+
+      - name: Stamp versionName and versionCode
+        id: stamp
+        run: |
+          # Tags published while the branch was called fork still count as history.
+          latest="$(git tag --list 'fork-v*' 'v*' | sed -E 's/^(fork-)?v//' | sort -V | tail -n 1)"
+          base="${latest}"
+          [ -n "${base}" ] || base="2.0.0"
+          major="${base%%.*}"
+          rest="${base#*.}"
+          minor="${rest%%.*}"
+          patch="${rest#*.}"
+          version="${major}.${minor}.$((patch + 1))"
+          ./scripts/version.sh "${version}"
+          # Android only compares versionCode. Fork builds stay above the small
+          # numbers upstream ships, and increase with every run of this workflow.
+          sed -i "s/versionCode = [0-9]*/versionCode = $((100000 + GITHUB_RUN_NUMBER))/" app/build.gradle.kts
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+
+      - name: Build the signed release APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEYSTORE_ALIAS }}
+        run: ./gradlew --no-daemon lint test assembleRelease --stacktrace
+
+      - name: Verify the APK is signed
+        run: |
+          apk="$(find app/build/outputs/apk/release -name '*.apk' ! -name '*unsigned*' | head -n 1)"
+          test -n "${apk}" || { echo '::error::no signed release APK was produced'; exit 1; }
+          "${ANDROID_HOME}/build-tools/37.0.0/apksigner" verify --print-certs "${apk}"
+          cp "${apk}" hypergesture.apk
+          sha256sum hypergesture.apk >hypergesture.apk.sha256
+
+      - name: Publish the GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.stamp.outputs.version }}
+          name: v${{ steps.stamp.outputs.version }}
+          generate_release_notes: true
+          files: |
+            hypergesture.apk
+            hypergesture.apk.sha256
