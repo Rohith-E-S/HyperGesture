@@ -23,8 +23,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,25 +32,37 @@ import org.junit.Test
 
 class NavigationRecoveryRunnerTest {
 
-    private class FakeStore(var enabled: Boolean = true) : RecoveryStore {
-        data class Record(val status: RecoveryStatus?, val trigger: RecoveryTrigger, val at: Long)
+    private class FakeStore(
+        var enabled: Boolean = true,
+        var granted: Boolean = true,
+    ) : RecoveryStore {
+        data class Record(val status: RecoveryStatus, val trigger: RecoveryTrigger, val at: Long)
 
-        private val stateFlow = MutableStateFlow(RecoveryState(enabled = enabled))
         val records = mutableListOf<Record>()
-
-        override val state: Flow<RecoveryState> = stateFlow
 
         override suspend fun isEnabled() = enabled
 
-        override suspend fun record(status: RecoveryStatus?, trigger: RecoveryTrigger, at: Long) {
+        override suspend fun record(status: RecoveryStatus, trigger: RecoveryTrigger, at: Long) {
             records += Record(status, trigger, at)
-            if (status != null) stateFlow.value = stateFlow.value.copy(status = status)
+        }
+
+        override suspend fun exemptionsGranted() = granted
+
+        override suspend fun markExemptionsGranted(granted: Boolean) {
+            this.granted = granted
         }
     }
 
-    private class FakeSettings(var fsg: String? = "0", var nav: String? = "0") : SettingsReader {
-        override fun navigationValues() =
-            mapOf("force_fsg_nav_bar" to fsg, "navigation_mode" to nav)
+    private class FakeSettings(
+        var fsg: String? = "0",
+        var nav: String? = "0",
+        var gesture: String? = "1",
+    ) : SettingsReader {
+        override fun navigationValues() = mapOf(
+            "force_fsg_nav_bar" to fsg,
+            "navigation_mode" to nav,
+            "use_gesture_version_three" to gesture,
+        )
     }
 
     private class FakeShell(
@@ -95,6 +105,7 @@ class NavigationRecoveryRunnerTest {
         fun values(correct: Boolean) {
             settings.fsg = if (correct) "1" else "0"
             settings.nav = if (correct) "2" else "0"
+            settings.gesture = if (correct) "1" else "0"
         }
     }
 
@@ -175,6 +186,50 @@ class NavigationRecoveryRunnerTest {
         assertTrue(script.contains("use_gesture_version_three"))
         assertTrue(script.contains("cmd overlay"))
         assertFalse("a forced run writes without the guard", script.contains("if ["))
+    }
+
+    @Test
+    fun `an ungranted exemption retries the forced path until it succeeds`() = runBlocking {
+        val f = Fixture(this)
+        f.store.granted = false
+        f.values(correct = true)
+
+        assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.PERIODIC))
+
+        val script = f.shell.commands.single()
+        assertTrue(script.contains("appops set com.h3nc4.hypergesture 10008 allow"))
+        assertTrue("a forced retry writes without the guard", !script.contains("if ["))
+        assertTrue(f.store.granted)
+
+        // Once granted, a steady state is back to probing without a process.
+        assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.PERIODIC))
+        assertEquals(1, f.shell.commands.size)
+    }
+
+    @Test
+    fun `a HyperOS gesture flag mismatch still runs the repair`() = runBlocking {
+        val f = Fixture(this)
+        f.hyperOs = true
+        f.values(correct = true)
+        f.settings.gesture = "0"
+        f.shell.onExec = { f.values(correct = true) }
+
+        assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.SETTINGS_OBSERVER))
+
+        val script = f.shell.commands.single()
+        assertTrue(script.contains("settings put global use_gesture_version_three 1"))
+        assertTrue(script.contains("cmd overlay"))
+    }
+
+    @Test
+    fun `a non-HyperOS build ignores the gesture flag`() = runBlocking {
+        val f = Fixture(this)
+        f.values(correct = true)
+        f.settings.gesture = "0"
+
+        assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.PERIODIC))
+
+        assertTrue(f.shell.commands.isEmpty())
     }
 
     @Test

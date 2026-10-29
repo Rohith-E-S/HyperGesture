@@ -46,6 +46,30 @@ class NavigationSettingTargetsTest {
     }
 
     @Test
+    fun theGestureFlagIsVerifiedOnlyOnHyperOs() {
+        val correct = mapOf("force_fsg_nav_bar" to "1", "navigation_mode" to "2")
+        assertTrue(NavigationSettingTargets.verified(correct))
+        // A build that does not expose the flag (null) is not a mismatch.
+        assertTrue(NavigationSettingTargets.verified(correct, includeHyperOs = true))
+        assertTrue(
+            NavigationSettingTargets.verified(
+                correct + ("use_gesture_version_three" to "1"),
+                includeHyperOs = true,
+            ),
+        )
+        assertTrue(
+            "a wrong flag is ignored when HyperOS is not requested",
+            NavigationSettingTargets.verified(correct + ("use_gesture_version_three" to "0")),
+        )
+        assertFalse(
+            NavigationSettingTargets.verified(
+                correct + ("use_gesture_version_three" to "0"),
+                includeHyperOs = true,
+            ),
+        )
+    }
+
+    @Test
     fun theRepairScriptIsGeneratedFromTheTargets() {
         val script = NavigationRecoveryScript.build(
             packageName = "com.h3nc4.hypergesture",

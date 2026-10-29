@@ -127,9 +127,9 @@ internal class AppModel(
     fun setRecoveryEnabled(enabled: Boolean) {
         scope.launch(Dispatchers.IO) {
             navigationRecovery.setEnabled(enabled)
-            // Turning it on is the moment to grant the exemptions, even when the values
-            // already look right; probes alone would skip them forever.
-            if (enabled) recoveryRunner.run(RecoveryTrigger.MANUAL, force = true)
+            // The runner forces while the exemptions are still ungranted, and its own scope
+            // keeps the repair alive if this screen goes away.
+            if (enabled) recoveryRunner.launch(RecoveryTrigger.MANUAL)
         }
     }
 

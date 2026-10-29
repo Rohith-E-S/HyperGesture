@@ -71,17 +71,20 @@ data class RecoveryState(
 
 /** What the runner needs from storage; tests implement this without DataStore. */
 internal interface RecoveryStore {
-    val state: Flow<RecoveryState>
 
     suspend fun isEnabled(): Boolean
 
-    /** A null [status] records a check that found nothing to change. */
-    suspend fun record(status: RecoveryStatus?, trigger: RecoveryTrigger, at: Long)
+    suspend fun record(status: RecoveryStatus, trigger: RecoveryTrigger, at: Long)
+
+    /** False until the app-ops and battery exemptions have been granted by a forced run. */
+    suspend fun exemptionsGranted(): Boolean
+
+    suspend fun markExemptionsGranted(granted: Boolean)
 }
 
 internal class NavigationRecoveryRepository(private val context: Context) : RecoveryStore {
 
-    override val state: Flow<RecoveryState> = context.navigationRecoveryStore.data.map { preferences ->
+    val state: Flow<RecoveryState> = context.navigationRecoveryStore.data.map { preferences ->
         RecoveryState(
             enabled = preferences[ENABLED] ?: false,
             status = decodeRecoveryStatus(preferences[STATUS]),
@@ -99,15 +102,24 @@ internal class NavigationRecoveryRepository(private val context: Context) : Reco
         } else {
             NavigationRecoveryScheduler.cancelPeriodic(context)
             record(RecoveryStatus.DISABLED, RecoveryTrigger.MANUAL, System.currentTimeMillis())
+            // A later enable must grant the exemptions again, not trust the old grants.
+            markExemptionsGranted(false)
         }
     }
 
-    override suspend fun record(status: RecoveryStatus?, trigger: RecoveryTrigger, at: Long) {
+    override suspend fun record(status: RecoveryStatus, trigger: RecoveryTrigger, at: Long) {
         context.navigationRecoveryStore.edit { preferences ->
             preferences[LAST_ATTEMPT_AT] = at
             preferences[LAST_TRIGGER] = trigger.name
-            if (status != null) preferences[STATUS] = status.name
+            preferences[STATUS] = status.name
         }
+    }
+
+    override suspend fun exemptionsGranted(): Boolean =
+        context.navigationRecoveryStore.data.first()[EXEMPTIONS_GRANTED] ?: false
+
+    override suspend fun markExemptionsGranted(granted: Boolean) {
+        context.navigationRecoveryStore.edit { it[EXEMPTIONS_GRANTED] = granted }
     }
 
     private companion object {
@@ -115,6 +127,7 @@ internal class NavigationRecoveryRepository(private val context: Context) : Reco
         val STATUS = stringPreferencesKey("status")
         val LAST_ATTEMPT_AT = longPreferencesKey("last_attempt_at")
         val LAST_TRIGGER = stringPreferencesKey("last_trigger")
+        val EXEMPTIONS_GRANTED = booleanPreferencesKey("exemptions_granted")
     }
 }
 

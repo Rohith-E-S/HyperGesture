@@ -35,19 +35,20 @@ HyperGesture has an explicit, off-by-default Shizuku option that maintains `Sett
 
 ### Probe first, repair only on mismatch
 
-Every trigger starts with a zero-process read of both values through the app's own `ContentResolver`. Those reads need no permission, so a steady state costs no Shizuku call and spawns no shell. Only a mismatch reaches Shizuku, and the script re-checks the values itself before writing, so a probe that raced a repair does not write again. The script is generated from the same target list the probe verifies, so the two cannot drift.
+Non-forced triggers start with a zero-process read of the target values through the app's own `ContentResolver`; on HyperOS that includes `use_gesture_version_three`, so a gesture flag reset on its own still triggers a repair. Those reads need no permission, so a steady state costs no Shizuku call and spawns no shell. Only a mismatch reaches Shizuku, and the script re-checks the values itself before writing, so a probe that raced a repair does not write again. The script is generated from the same target list the probe verifies, so the two cannot drift. Forced triggers (enable, boot, self-update, or an ungranted exemption) skip the probe and write unconditionally.
 
-The repair also disables the three-button overlay when it is active and sets MIUI's `use_gesture_version_three` flag, but only on HyperOS builds. Shell output is drained while the command runs, so a chatty `cmd overlay list` cannot fill the pipe buffer and hang the wait.
+The repair also disables the three-button overlay when it is active, but only on HyperOS builds. The overlay state cannot be read without a shell, so it is re-applied whenever a target mismatch or a forced run reaches the script. Shell output is drained while the command runs, so a chatty `cmd overlay list` cannot fill the pipe buffer and hang the wait. Shizuku's shell runs as user 0, which is the user these settings target, so the commands carry no explicit `--user` flag.
 
 ### Exemptions belong to forced runs
 
-The app-ops grants (10008, 10021, usage stats), the doze whitelist entry and the active standby bucket stop MIUI's cleaner from killing the service. They are granted by enabling recovery, at boot, and after the app replaces itself; a settings change, launcher switch, or periodic check only needs the two writes.
+The app-ops grants (10008, 10021, usage stats), the doze whitelist entry and the active standby bucket stop MIUI's cleaner from killing the service. They are granted by enabling recovery, at boot, and after the app replaces itself; a settings change, launcher switch, or periodic check only needs the two writes. Because the grants cannot be read back, the app records whether a forced run reported success and, until it has, keeps retrying the forced path on every trigger. Disabling recovery clears that record, so a later enable grants them again.
 
 ### Triggers
 
 | Trigger | Source | Notes |
 | --- | --- | --- |
-| App resume, manual check, toggle | `AppModel` and the recovery card | Enabling, and the check on resume, force a full run |
+| Enable / disable | Recovery card | Enabling forces a run; disabling cancels the periodic work |
+| App resume, manual check | `AppModel` and the recovery card | Probe only; forces while an exemption grant is still pending |
 | Boot | `BOOT_COMPLETED` | Forced; HyperOS resets the mode across a reboot |
 | Settings change | ContentObserver in the accessibility service | A repair re-enters the observer with correct values, which stops the loop |
 | Default home change | `ACTION_PREFERRED_ACTIVITY_CHANGED`, registered at runtime | Fires only while the accessibility service is connected |
@@ -61,7 +62,7 @@ HyperOS's watchdog can reset the settings shortly after the broadcast, so a laun
 
 ### Status vocabulary
 
-- `VERIFIED` — both target values read back correctly.
+- `VERIFIED` — all target values read back correctly (on HyperOS, including `use_gesture_version_three`).
 - `COMMAND_FAILED` — the shell exited non-zero or timed out and the readback was still wrong.
 - `NOT_VERIFIED` — the commands succeeded but the readback did not stick, usually the vendor watchdog reverting them.
 - `SHIZUKU_UNAVAILABLE`, `PERMISSION_DENIED` — no repair was attempted.

@@ -103,6 +103,7 @@
     <string name="recovery_trigger_launcher_change">launcher changed</string>
     <string name="recovery_trigger_app_change">app installed or updated</string>
     <string name="recovery_trigger_periodic">periodic check</string>
+    <string name="recovery_trigger_unknown">unknown</string>
     <string name="recovery_explanation">Maintains full-screen gestures across launcher changes, suppresses conflicting 3-button overlays, and grants MIUI Autostart &amp; Battery immunity so HyperOS never kills your gestures.</string>
     <string name="recovery_request_permission">Request Shizuku permission</string>
 

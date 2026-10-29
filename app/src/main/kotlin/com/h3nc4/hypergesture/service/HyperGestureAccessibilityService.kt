@@ -120,6 +120,9 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     }
 
     private fun setUp() {
+        // onServiceConnected can fire again without an intervening teardown; setting up
+        // twice would double-register every listener, observer, receiver and collector.
+        if (overlay != null) return
         settings = GestureSettingsRepository(applicationContext)
         performer = GestureActionPerformer(this)
         windowManager = getSystemService(WindowManager::class.java)
@@ -176,11 +179,13 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         }
         val preferredHome = receiver(RecoveryTrigger.PREFERRED_HOME)
         val packages = receiver(RecoveryTrigger.PACKAGE_CHANGE)
+        // Both are protected broadcasts sent by system_server, so NOT_EXPORTED still
+        // receives them while keeping other apps from addressing this receiver.
         ContextCompat.registerReceiver(
             this,
             preferredHome,
             IntentFilter(ACTION_PREFERRED_ACTIVITY_CHANGED),
-            ContextCompat.RECEIVER_EXPORTED,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         val packageFilter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -190,7 +195,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             // Without the scheme this filter matches none of the package intents.
             addDataScheme("package")
         }
-        ContextCompat.registerReceiver(this, packages, packageFilter, ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(this, packages, packageFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
         return listOf(preferredHome, packages)
     }
 

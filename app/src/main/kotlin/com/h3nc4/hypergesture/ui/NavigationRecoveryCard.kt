@@ -116,5 +116,5 @@ private fun triggerLabel(trigger: RecoveryTrigger?): String = when (trigger) {
     RecoveryTrigger.PREFERRED_HOME -> stringResource(R.string.recovery_trigger_launcher_change)
     RecoveryTrigger.PACKAGE_CHANGE -> stringResource(R.string.recovery_trigger_app_change)
     RecoveryTrigger.PERIODIC -> stringResource(R.string.recovery_trigger_periodic)
-    null -> stringResource(R.string.recovery_trigger_manual)
+    null -> stringResource(R.string.recovery_trigger_unknown)
 }

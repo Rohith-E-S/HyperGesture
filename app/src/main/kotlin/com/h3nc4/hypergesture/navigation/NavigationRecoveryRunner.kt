@@ -37,14 +37,29 @@ import java.io.InputStream
 import java.lang.reflect.Method
 import java.util.concurrent.TimeUnit
 
-/** The two values recovery maintains; the repair script and the test are generated from it. */
+/** The settings recovery maintains; the repair script and the probe are generated from it. */
 internal object NavigationSettingTargets {
     val all = listOf(
         SettingTarget("global", "force_fsg_nav_bar", "1"),
         SettingTarget("secure", "navigation_mode", "2"),
     )
 
-    fun verified(values: Map<String, String?>) = all.all { values[it.key] == it.value }
+    /** Only meaningful, and only written, on HyperOS builds. */
+    private val hyperOs = listOf(
+        SettingTarget("global", "use_gesture_version_three", "1"),
+    )
+
+    fun targets(includeHyperOs: Boolean): List<SettingTarget> =
+        if (includeHyperOs) all + hyperOs else all
+
+    fun verified(values: Map<String, String?>, includeHyperOs: Boolean = false): Boolean {
+        if (!all.all { values[it.key] == it.value }) return false
+        if (!includeHyperOs) return true
+        // A build that does not expose the gesture flag reports null. Treat that as not
+        // applicable so a ROM that ignores the write cannot trigger a shell every time.
+        val flag = hyperOs.single()
+        return values[flag.key]?.let { it == flag.value } ?: true
+    }
 }
 
 internal data class SettingTarget(val namespace: String, val key: String, val value: String)
@@ -58,6 +73,8 @@ internal class ContentResolverSettingsReader(private val context: Context) : Set
     override fun navigationValues(): Map<String, String?> = mapOf(
         "force_fsg_nav_bar" to Settings.Global.getString(context.contentResolver, "force_fsg_nav_bar"),
         "navigation_mode" to Settings.Secure.getString(context.contentResolver, "navigation_mode"),
+        "use_gesture_version_three" to
+            Settings.Global.getString(context.contentResolver, "use_gesture_version_three"),
     )
 }
 
@@ -171,14 +188,19 @@ internal object NavigationRecoveryScript {
      * write unconditionally.
      * @param includeExemptions grants the app-ops and battery exemptions; only forced runs
      * need them, and granting them on every probe would defeat the point of the probe.
+     *
+     * Shizuku's shell runs as user 0, which is the user these settings target, so the
+     * commands need no explicit `--user` flag.
      */
     fun build(packageName: String, includeExemptions: Boolean, hyperOs: Boolean, guard: Boolean): String {
         require(PACKAGE_NAME.matches(packageName)) { "Unexpected package name: $packageName" }
 
+        val targets = NavigationSettingTargets.targets(includeHyperOs = hyperOs)
         val repairs = buildList {
-            addAll(NavigationSettingTargets.all.map { "settings put ${it.namespace} ${it.key} ${it.value}" })
+            addAll(targets.map { "settings put ${it.namespace} ${it.key} ${it.value}" })
             if (hyperOs) {
-                add("settings put global use_gesture_version_three 1 2>/dev/null || true")
+                // The overlay rides along with any target mismatch; it cannot be probed
+                // without a shell, but it is re-enabled together with the gesture flag.
                 add(
                     """
                     if cmd overlay list 2>/dev/null | grep -q '\[x\] com.android.internal.systemui.navbar.threebutton'; then
@@ -189,7 +211,7 @@ internal object NavigationRecoveryScript {
             }
         }
         val body = if (guard) {
-            val mismatch = NavigationSettingTargets.all.joinToString(" || ") {
+            val mismatch = targets.joinToString(" || ") {
                 "\"\$(settings get ${it.namespace} ${it.key})\" != \"${it.value}\""
             }
             buildString {
@@ -237,8 +259,14 @@ internal class NavigationRecoveryRunner(
     suspend fun run(trigger: RecoveryTrigger, force: Boolean = false): RecoveryStatus? {
         if (!store.isEnabled()) return null
 
+        // The exemption grants cannot be read back, so until a forced run reports success
+        // every trigger retries that path; otherwise enabling while Shizuku was down would
+        // leave the app without its app-ops/doze/standby exemptions forever.
+        val forceRun = force || !store.exemptionsGranted()
+        val hyperOs = isHyperOs()
+
         val availability = gateway.availability()
-        if (!force && valuesAreCorrect()) {
+        if (!forceRun && valuesAreCorrect(hyperOs)) {
             return finish(availability.status(), trigger)
         }
         if (availability != ShizukuAvailability.Available) {
@@ -248,18 +276,18 @@ internal class NavigationRecoveryRunner(
         return repairMutex.withLock {
             // A run that queued behind another may already have repaired the values.
             if (!store.isEnabled()) return@withLock null
-            if (!force && valuesAreCorrect()) {
+            if (!forceRun && valuesAreCorrect(hyperOs)) {
                 return@withLock finish(RecoveryStatus.VERIFIED, trigger)
             }
-            finish(repair(force), trigger)
+            finish(repair(forceRun, hyperOs), trigger)
         }
     }
 
-    private suspend fun repair(force: Boolean): RecoveryStatus {
+    private suspend fun repair(force: Boolean, hyperOs: Boolean): RecoveryStatus {
         val script = NavigationRecoveryScript.build(
             packageName = packageName,
             includeExemptions = force,
-            hyperOs = isHyperOs(),
+            hyperOs = hyperOs,
             guard = !force,
         )
         val result = try {
@@ -267,23 +295,28 @@ internal class NavigationRecoveryRunner(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            return if (valuesAreCorrect()) {
+            return if (valuesAreCorrect(hyperOs)) {
                 RecoveryStatus.VERIFIED
             } else {
                 gateway.availability().failureStatus()
             }
         }
+        if (force && !result.timedOut && result.exitCode == 0) {
+            // The exemption commands end in `|| true`, so a clean exit is the only signal.
+            store.markExemptionsGranted(true)
+        }
         // The settings provider is the truth, even when the shell timed out or exited non-zero.
         return when {
-            valuesAreCorrect() -> RecoveryStatus.VERIFIED
+            valuesAreCorrect(hyperOs) -> RecoveryStatus.VERIFIED
             result.timedOut || result.exitCode != 0 -> RecoveryStatus.COMMAND_FAILED
             else -> RecoveryStatus.NOT_VERIFIED
         }
     }
 
-    private fun valuesAreCorrect(): Boolean =
+    private fun valuesAreCorrect(hyperOs: Boolean): Boolean =
         NavigationSettingTargets.verified(
             runCatching { settings.navigationValues() }.getOrDefault(emptyMap()),
+            includeHyperOs = hyperOs,
         )
 
     private suspend fun finish(status: RecoveryStatus, trigger: RecoveryTrigger): RecoveryStatus {
