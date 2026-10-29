@@ -17,6 +17,7 @@
 
 package com.h3nc4.hypergesture.service
 
+import android.content.ComponentName
 import android.os.SystemClock
 import com.h3nc4.hypergesture.navigation.ShizukuAvailability
 import com.h3nc4.hypergesture.navigation.ShizukuGateway
@@ -58,7 +59,16 @@ internal class RecentTasksSource(
     @Volatile
     private var fetchedAt = 0L
 
+    @Volatile
+    private var component: ComponentName? = null
+
     private val refreshing = AtomicBoolean()
+
+    /**
+     * The activity the system uses for recents, when it has been read. It never changes
+     * for an install, so it is kept without an age limit.
+     */
+    fun recentsComponent(): ComponentName? = component
 
     /** The last list, when it was fetched less than [maxAgeMs] ago; null when too old. */
     fun cached(maxAgeMs: Long): List<String>? {
@@ -74,6 +84,7 @@ internal class RecentTasksSource(
                 if (gateway.availability() != ShizukuAvailability.Available) return@launch
                 val result = shell.exec(COMMAND, TIMEOUT_SECONDS)
                 if (result.timedOut || result.exitCode != 0) return@launch
+                parseRecentsComponent(result.output)?.let { component = it }
                 val parsed = parseRecentTasks(result.output)
                 if (parsed.isNotEmpty()) {
                     packages = parsed
@@ -137,6 +148,14 @@ internal fun parseRecentTasks(dump: String): List<String> {
         .toList()
 }
 
+/**
+ * The recents activity named in [dump], or null when the line is absent. It has no intent
+ * filter, so it can only be learned from here rather than resolved with PackageManager.
+ */
+internal fun parseRecentsComponent(dump: String): ComponentName? =
+    RECENTS_COMPONENT.find(dump)?.groupValues?.get(1)
+        ?.let(ComponentName::unflattenFromString)
+
 private class ParsedTask(val id: Int, val type: String) {
     var packageName: String? = null
     var ignored = false
@@ -147,3 +166,5 @@ private val HEADER = Regex("""^\s*\* Recent #\d+: Task\{[0-9a-f]+ #(\d+) type=(\
 private val HIDDEN_ID = Regex("""#(\d+) type=""")
 
 private val COMPONENT = Regex("""^\s*(?:mActivityComponent|realActivity)=([^/\s]+)/""")
+
+private val RECENTS_COMPONENT = Regex("""mRecentsComponent=ComponentInfo\{([^}]+)\}""")
