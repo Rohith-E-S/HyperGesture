@@ -45,8 +45,10 @@ import com.h3nc4.hypergesture.gesture.PlatformDefaults
 import com.h3nc4.hypergesture.gesture.ScreenEdge
 import com.h3nc4.hypergesture.gesture.TouchSample
 import com.h3nc4.hypergesture.navigation.ACTION_PREFERRED_ACTIVITY_CHANGED
-import com.h3nc4.hypergesture.navigation.NavigationRecoveryScheduler
+import com.h3nc4.hypergesture.navigation.NavigationRecoveryRunner
+import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.NavigationSettingsObserver
+import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 import com.h3nc4.hypergesture.navigation.WATCHDOG_GRACE_MS
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
 import com.h3nc4.hypergesture.setup.GestureTileService
@@ -55,7 +57,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -132,8 +133,9 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
             .registerDisplayListener(displayListener, handler)
 
-        navigationObserver = NavigationSettingsObserver(this, handler).also { it.register() }
-        triggerReceivers = registerTriggerReceivers()
+        val recovery = NavigationRecoveryRuntime.runner(applicationContext)
+        navigationObserver = NavigationSettingsObserver(this, recovery, handler).also { it.register() }
+        triggerReceivers = registerTriggerReceivers(recovery)
 
         scope.launch {
             settings.configuration.collect { updated ->
@@ -165,18 +167,15 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
      * The second pass catches the HyperOS watchdog, which resets the settings after the
      * broadcast that wakes it.
      */
-    private fun registerTriggerReceivers(): List<BroadcastReceiver> {
-        fun receiver() = object : BroadcastReceiver() {
+    private fun registerTriggerReceivers(runner: NavigationRecoveryRunner): List<BroadcastReceiver> {
+        fun receiver(trigger: RecoveryTrigger) = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                scope.launch(Dispatchers.IO) {
-                    NavigationRecoveryScheduler.runDirectIfEnabled(this@HyperGestureAccessibilityService)
-                    delay(WATCHDOG_GRACE_MS)
-                    NavigationRecoveryScheduler.runDirectIfEnabled(this@HyperGestureAccessibilityService)
-                }
+                runner.launch(trigger)
+                runner.launch(trigger, delayMs = WATCHDOG_GRACE_MS)
             }
         }
-        val preferredHome = receiver()
-        val packages = receiver()
+        val preferredHome = receiver(RecoveryTrigger.PREFERRED_HOME)
+        val packages = receiver(RecoveryTrigger.PACKAGE_CHANGE)
         ContextCompat.registerReceiver(
             this,
             preferredHome,

@@ -45,7 +45,7 @@ internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifi
             RecoveryStatus.SHIZUKU_UNAVAILABLE -> R.string.recovery_status_unavailable
             RecoveryStatus.PERMISSION_DENIED -> R.string.recovery_status_permission
             RecoveryStatus.VERIFIED -> R.string.recovery_status_verified
-            RecoveryStatus.WRITE_FAILED -> R.string.recovery_status_failed
+            RecoveryStatus.COMMAND_FAILED, RecoveryStatus.NOT_VERIFIED -> R.string.recovery_status_failed
         },
     )
     Card(

@@ -41,9 +41,9 @@ import com.h3nc4.hypergesture.navigation.NavigationIntegration
 import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRepository
-import com.h3nc4.hypergesture.navigation.NavigationRecoveryScheduler
+import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryState
-import com.h3nc4.hypergesture.navigation.RecoveryStatus
+import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
 import com.h3nc4.hypergesture.setup.SetupChecklist
@@ -69,6 +69,7 @@ internal class AppModel(
 ) {
     val integration: NavigationIntegration = NavigationIntegrationFactory.create(context)
     val navigationRecovery = NavigationRecoveryRepository(context)
+    private val recoveryRunner = NavigationRecoveryRuntime.runner(context)
     val snackbar = SnackbarHostState()
 
     var configuration by mutableStateOf(GestureConfiguration())
@@ -124,7 +125,12 @@ internal class AppModel(
     }
 
     fun setRecoveryEnabled(enabled: Boolean) {
-        scope.launch { navigationRecovery.setEnabled(enabled) }
+        scope.launch(Dispatchers.IO) {
+            navigationRecovery.setEnabled(enabled)
+            // Turning it on is the moment to grant the exemptions, even when the values
+            // already look right; probes alone would skip them forever.
+            if (enabled) recoveryRunner.run(RecoveryTrigger.MANUAL, force = true)
+        }
     }
 
     fun requestShizukuPermission() {
@@ -134,9 +140,7 @@ internal class AppModel(
     }
 
     fun checkRecovery() {
-        scope.launch(Dispatchers.IO) {
-            NavigationRecoveryScheduler.runDirectIfEnabled(context)
-        }
+        scope.launch(Dispatchers.IO) { recoveryRunner.run(RecoveryTrigger.RESUME) }
     }
 
     /** Reset has no confirmation, so the snackbar offers the old values back instead. */
@@ -184,13 +188,8 @@ internal fun rememberAppModel(): AppModel {
         val binderListener = Shizuku.OnBinderReceivedListener {
             model.checkRecovery()
         }
-        val binderDeadListener = Shizuku.OnBinderDeadListener {
-            scope.launch {
-                if (model.navigationRecovery.isEnabled()) {
-                    model.navigationRecovery.setStatus(RecoveryStatus.SHIZUKU_UNAVAILABLE)
-                }
-            }
-        }
+        // The probe decides: a dead binder is only a problem when a repair would be needed.
+        val binderDeadListener = Shizuku.OnBinderDeadListener { model.checkRecovery() }
         val permissionListener = Shizuku.OnRequestPermissionResultListener { requestCode, grantResult ->
             if (requestCode == SHIZUKU_PERMISSION_REQUEST && grantResult == PackageManager.PERMISSION_GRANTED) {
                 model.checkRecovery()

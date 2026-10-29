@@ -20,10 +20,6 @@ package com.h3nc4.hypergesture.navigation
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 /**
  * Only `MY_PACKAGE_REPLACED` reaches this static receiver: the other package actions and
@@ -36,16 +32,12 @@ class NavigationRecoveryReceiver : BroadcastReceiver() {
         if (!shouldHandle(intent.action)) return
 
         val pending = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                NavigationRecoveryScheduler.runDirectIfEnabled(context)
-                // The vendor watchdog may reset the settings after the broadcast lands.
-                delay(WATCHDOG_GRACE_MS)
-                NavigationRecoveryScheduler.runDirectIfEnabled(context)
-            } finally {
-                pending.finish()
-            }
-        }
+        val runner = NavigationRecoveryRuntime.runner(context.applicationContext)
+        // Force: a self-update is exactly when the vendor watchdog rewrites the settings.
+        runner.launch(RecoveryTrigger.PACKAGE_CHANGE, force = true)
+            .invokeOnCompletion { pending.finish() }
+        // Best effort: the delayed pass is not awaited, so goAsync stays well under 10 s.
+        runner.launch(RecoveryTrigger.PACKAGE_CHANGE, delayMs = WATCHDOG_GRACE_MS)
     }
 }
 

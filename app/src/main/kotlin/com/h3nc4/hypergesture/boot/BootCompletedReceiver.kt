@@ -23,7 +23,8 @@ import android.content.Intent
 import android.util.Log
 import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
 import com.h3nc4.hypergesture.navigation.NavigationMode
-import com.h3nc4.hypergesture.navigation.NavigationRecoveryScheduler
+import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
+import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -38,21 +39,22 @@ class BootCompletedReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
 
         val pending = goAsync()
+        val appContext = context.applicationContext
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                NavigationRecoveryScheduler.runDirectIfEnabled(context)
+                NavigationRecoveryRuntime.runner(appContext).run(RecoveryTrigger.BOOT, force = true)
+                // Read after recovery, or the log describes the state it just repaired.
+                val status = NavigationIntegrationFactory.create(appContext).status()
+                if (status.available && status.currentMode != NavigationMode.GESTURAL) {
+                    Log.i(
+                        TAG,
+                        "Navigation mode after boot is ${status.currentMode}; " +
+                            "gestural navigation was not restored by the system.",
+                    )
+                }
             } finally {
                 pending.finish()
             }
-        }
-
-        val status = NavigationIntegrationFactory.create(context).status()
-        if (status.available && status.currentMode != NavigationMode.GESTURAL) {
-            Log.i(
-                TAG,
-                "Navigation mode after boot is ${status.currentMode}; " +
-                    "gestural navigation was not restored by the system.",
-            )
         }
     }
 
