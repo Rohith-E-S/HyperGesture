@@ -36,6 +36,7 @@ import com.h3nc4.hypergesture.diagnostics.Diagnostics
 import com.h3nc4.hypergesture.diagnostics.DiagnosticsCollector
 import com.h3nc4.hypergesture.diagnostics.ServiceStatus
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
+import com.h3nc4.hypergesture.gesture.withGestureDefaults
 import com.h3nc4.hypergesture.navigation.NavigationIntegration
 import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
 import com.h3nc4.hypergesture.navigation.NavigationMode
@@ -141,7 +142,7 @@ internal class AppModel(
     /** Reset has no confirmation, so the snackbar offers the old values back instead. */
     fun resetGestureSettings(message: String, undoLabel: String) {
         val previous = configuration
-        update { GestureConfiguration() }
+        update { it.withGestureDefaults() }
         scope.launch {
             val result = snackbar.showSnackbar(message, actionLabel = undoLabel, withDismissAction = true)
             if (result == SnackbarResult.ActionPerformed) update { previous }

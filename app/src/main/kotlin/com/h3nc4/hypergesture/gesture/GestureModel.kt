@@ -98,6 +98,25 @@ data class GestureConfiguration(
         }
 }
 
+/**
+ * Only the values the gesture settings screen exposes. Resetting from there must not reach
+ * app switching or Circle to Search, whose toggles have their own screens.
+ */
+fun GestureConfiguration.withGestureDefaults(): GestureConfiguration {
+    val defaults = GestureConfiguration()
+    return copy(
+        edgeWidthDp = defaults.edgeWidthDp,
+        sideMinimumSwipeDistanceDp = defaults.sideMinimumSwipeDistanceDp,
+        bottomMinimumSwipeDistanceDp = defaults.bottomMinimumSwipeDistanceDp,
+        maximumArmDurationMs = defaults.maximumArmDurationMs,
+        recentsHoldMs = defaults.recentsHoldMs,
+        leftEdgeBackEnabled = defaults.leftEdgeBackEnabled,
+        rightEdgeBackEnabled = defaults.rightEdgeBackEnabled,
+        landscapeConfirmEnabled = defaults.landscapeConfirmEnabled,
+        hapticFeedbackEnabled = defaults.hapticFeedbackEnabled,
+    )
+}
+
 /** Launcher3's numbers for a long press on the navigation handle, at AOSP's defaults. */
 data class PlatformDefaults(
     /** ViewConfiguration.getLongPressTimeout(), 400 ms on AOSP since Android 12. */
