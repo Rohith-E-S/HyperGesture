@@ -131,7 +131,9 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             windowManager = windowManager,
             replayer = this,
             onGestureAction = ::onGestureAction,
+            onAppSwitchBegin = performer::prefetchAppSwitch,
         )
+        performer.prefetchAppSwitch()
 
         (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
             .registerDisplayListener(displayListener, handler)

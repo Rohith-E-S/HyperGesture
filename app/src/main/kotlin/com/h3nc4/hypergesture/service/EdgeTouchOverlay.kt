@@ -63,6 +63,7 @@ internal class EdgeTouchOverlay(
     private val windowManager: WindowManager,
     private val replayer: TouchReplayer,
     private val onGestureAction: (GestureAction, ScreenEdge) -> Unit,
+    private val onAppSwitchBegin: () -> Unit = {},
     private val layout: OverlayLayout = OverlayLayout(),
 ) {
 
@@ -205,6 +206,7 @@ internal class EdgeTouchOverlay(
     }
 
     private fun onStreamStart(edge: ScreenEdge) {
+        if (edge == ScreenEdge.BOTTOM) onAppSwitchBegin()
         bellies.values.forEach(BackBellyOverlay::hide)
         confirmation.onDown(edge, SystemClock.uptimeMillis())
         syncPill()

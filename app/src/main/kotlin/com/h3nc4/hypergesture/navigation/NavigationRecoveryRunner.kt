@@ -121,7 +121,11 @@ internal object SystemShizukuGateway : ShizukuGateway {
 internal class ShizukuShellRunner : ShellRunner {
 
     override suspend fun exec(command: String, timeoutSeconds: Long): CommandResult =
-        runInterruptible(Dispatchers.IO) { run(command, timeoutSeconds) }
+        runInterruptible(Dispatchers.IO) {
+            runCatching { run(command, timeoutSeconds) }.getOrElse { throwable ->
+                CommandResult(exitCode = -1, output = throwable.message ?: throwable.javaClass.name)
+            }
+        }
 
     private fun run(command: String, timeoutSeconds: Long): CommandResult {
         val process = try {
@@ -133,24 +137,28 @@ internal class ShizukuShellRunner : ShellRunner {
         val stderr = StringBuilder()
         val drainOut = drain(process.inputStream, stdout)
         val drainErr = drain(process.errorStream, stderr)
-        return try {
-            if (process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-                drainOut.join(DRAIN_JOIN_MS)
-                drainErr.join(DRAIN_JOIN_MS)
-                CommandResult(
-                    exitCode = process.exitValue(),
-                    output = (stdout.toString() + stderr.toString()).trim(),
-                )
-            } else {
-                CommandResult(
-                    exitCode = -1,
-                    output = "Timed out after ${timeoutSeconds}s",
-                    timedOut = true,
-                )
-            }
-        } finally {
-            if (process.isAlive) process.destroyForcibly()
+        // The pipes reach EOF when the shell exits. Asking Shizuku for the process state
+        // via waitFor() or isAlive() throws IllegalArgumentException("process hasn't exited")
+        // on some versions, so inspect exitValue() safely and fall back to 0.
+        try {
+            drainOut.join(TimeUnit.SECONDS.toMillis(timeoutSeconds) + DRAIN_JOIN_MS)
+            drainErr.join(DRAIN_JOIN_MS)
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
         }
+        if (drainOut.isAlive || drainErr.isAlive) {
+            runCatching { process.destroyForcibly() }
+            return CommandResult(
+                exitCode = -1,
+                output = "Timed out after ${timeoutSeconds}s",
+                timedOut = true,
+            )
+        }
+        val exitCode = runCatching { process.exitValue() }.getOrDefault(0)
+        return CommandResult(
+            exitCode = exitCode,
+            output = (stdout.toString() + stderr.toString()).trim(),
+        )
     }
 
     private fun drain(stream: InputStream, sink: StringBuilder) =
