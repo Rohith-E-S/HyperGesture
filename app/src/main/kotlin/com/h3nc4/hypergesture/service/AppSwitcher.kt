@@ -52,6 +52,9 @@ internal class AppSwitcher(
      */
     fun prefetchTasks() = recents.refresh()
 
+    /** The system's recents activity, when its task list has been read. */
+    fun recentsComponent(): ComponentName? = recents.recentsComponent()
+
     // The order this walk started from, newest first, and where in it the last step landed.
     // Kept rather than re-read because usage events lag by seconds: right after a launch the
     // event stream still names the previous app, so re-reading would keep resetting the walk

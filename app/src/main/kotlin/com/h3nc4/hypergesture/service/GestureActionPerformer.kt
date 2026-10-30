@@ -19,6 +19,7 @@
 package com.h3nc4.hypergesture.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.util.Log
 import android.widget.Toast
 import com.h3nc4.hypergesture.R
@@ -41,7 +42,23 @@ class GestureActionPerformer(private val service: AccessibilityService) {
     /** Called when a bottom-edge touch begins, so the recents list is ready by release. */
     fun prefetchAppSwitch() = switcher.prefetchTasks()
 
+    /**
+     * MIUI animates `GLOBAL_ACTION_RECENTS` itself, with no option to suppress it. The
+     * recents activity is exported, so starting it directly with NO_ANIMATION turns the
+     * switch into a cut, like the app switch. Falls back to the global action when the
+     * activity is not known yet or refuses the start.
+     */
+    private fun openRecents(): Boolean {
+        val component = switcher.recentsComponent() ?: return false
+        val intent = Intent().setComponent(component)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+        return runCatching { service.startActivity(intent) }
+            .onFailure { Log.w(TAG, "Could not open recents without animation", it) }
+            .isSuccess
+    }
+
     fun perform(action: GestureAction): Boolean {
+        if (action == GestureAction.Recents && openRecents()) return true
         val globalAction = when (action) {
             GestureAction.Back -> AccessibilityService.GLOBAL_ACTION_BACK
             GestureAction.Home -> AccessibilityService.GLOBAL_ACTION_HOME

@@ -18,6 +18,7 @@
 package com.h3nc4.hypergesture.service
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class RecentTasksTest {
@@ -94,5 +95,19 @@ class RecentTasksTest {
                 isTrimmable=true isForceHidden=false isForceExcludedFromRecents=false
         """.trimIndent()
         assertEquals(listOf("com.example.app"), parseRecentTasks(coldDump))
+    }
+
+    @Test
+    fun `parses recents component string from dumpsys`() {
+        assertEquals(
+            "com.mi.android.globallauncher/com.miui.home.recents.RecentsActivity",
+            parseRecentsComponentString(dump),
+        )
+    }
+
+    @Test
+    fun `returns null when recents component is absent`() {
+        assertNull(parseRecentsComponentString("ACTIVITY MANAGER RECENT TASKS\n"))
+        assertNull(parseRecentsComponent("ACTIVITY MANAGER RECENT TASKS\n"))
     }
 }
