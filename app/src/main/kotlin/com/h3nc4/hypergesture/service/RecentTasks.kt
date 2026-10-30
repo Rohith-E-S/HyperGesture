@@ -84,7 +84,7 @@ internal class RecentTasksSource(
                 if (gateway.availability() != ShizukuAvailability.Available) return@launch
                 val result = shell.exec(COMMAND, TIMEOUT_SECONDS)
                 if (result.timedOut || result.exitCode != 0) return@launch
-                parseRecentsComponent(result.output)?.let { component = it }
+                component = parseRecentsComponent(result.output)
                 val parsed = parseRecentTasks(result.output)
                 if (parsed.isNotEmpty()) {
                     packages = parsed
@@ -149,12 +149,17 @@ internal fun parseRecentTasks(dump: String): List<String> {
 }
 
 /**
+ * The recents activity component string named in [dump], or null when the line is absent.
+ */
+internal fun parseRecentsComponentString(dump: String): String? =
+    RECENTS_COMPONENT.find(dump)?.groupValues?.get(1)
+
+/**
  * The recents activity named in [dump], or null when the line is absent. It has no intent
  * filter, so it can only be learned from here rather than resolved with PackageManager.
  */
 internal fun parseRecentsComponent(dump: String): ComponentName? =
-    RECENTS_COMPONENT.find(dump)?.groupValues?.get(1)
-        ?.let(ComponentName::unflattenFromString)
+    parseRecentsComponentString(dump)?.let(ComponentName::unflattenFromString)
 
 private class ParsedTask(val id: Int, val type: String) {
     var packageName: String? = null
