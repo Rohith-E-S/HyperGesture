@@ -44,9 +44,9 @@ On a non-rooted device, Shizuku must be started again after every reboot. Settin
 
 ## Contributors
 
-- Henrique Almeida ([@h3nc4](https://github.com/h3nc4)), author and maintainer
+- Henrique Almeida ([@h3nc4](https://github.com/h3nc4)) Author, Gestures
 - Victor Eduardo ([@victoresidoro](https://github.com/victoresidoro)), Circle to Search, the Control Center tile, edge to edge and wrapping labels
-- Rohith-E-S ([@Rohith-E-S](https://github.com/Rohith-E-S)), Shizuku navigation setting recovery for HyperOS
+- Rohith-E-S ([@Rohith-E-S](https://github.com/Rohith-E-S)), Navigation buttons hider shizuku, App switch animation
 
 Circle to Search starts the way [MiCTS](https://github.com/parallelcc/MiCTS) and [CTSLauncher](https://github.com/chenxiaolong/CTSLauncher) do. Everyone who has sent code is on [the contributors page](https://github.com/Rohith-E-S/HyperGesture/graphs/contributors).
 
