@@ -138,8 +138,8 @@ internal class ShizukuShellRunner : ShellRunner {
         val drainOut = drain(process.inputStream, stdout)
         val drainErr = drain(process.errorStream, stderr)
         // The pipes reach EOF when the shell exits. Asking Shizuku for the process state
-        // instead is unreliable: waitFor(), isAlive() and exitValue() all throw
-        // IllegalArgumentException("process hasn't exited") on some versions.
+        // via waitFor() or isAlive() throws IllegalArgumentException("process hasn't exited")
+        // on some versions, so inspect exitValue() safely and fall back to 0.
         try {
             drainOut.join(TimeUnit.SECONDS.toMillis(timeoutSeconds) + DRAIN_JOIN_MS)
             drainErr.join(DRAIN_JOIN_MS)
@@ -154,8 +154,9 @@ internal class ShizukuShellRunner : ShellRunner {
                 timedOut = true,
             )
         }
+        val exitCode = runCatching { process.exitValue() }.getOrDefault(0)
         return CommandResult(
-            exitCode = 0,
+            exitCode = exitCode,
             output = (stdout.toString() + stderr.toString()).trim(),
         )
     }

@@ -83,4 +83,16 @@ class RecentTasksTest {
     fun `an empty dump yields no tasks`() {
         assertEquals(emptyList<String>(), parseRecentTasks("ACTIVITY MANAGER RECENT TASKS\n"))
     }
+
+    @Test
+    fun `parses realActivity when mActivityComponent is absent`() {
+        val coldDump = """
+            ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+              * Recent #0: Task{1234567 #1001 type=standard A=1000:com.example.app}
+                realActivity=com.example.app/.MainActivity
+                autoRemoveRecents=false isPersistable=true activityType=1
+                isTrimmable=true isForceHidden=false isForceExcludedFromRecents=false
+        """.trimIndent()
+        assertEquals(listOf("com.example.app"), parseRecentTasks(coldDump))
+    }
 }

@@ -204,13 +204,6 @@ internal class AppSwitcher(
                 launchable.getOrPut(visit.packageName) {
                     context.packageManager.getLaunchIntentForPackage(visit.packageName) != null
                 }
-        val apps = appWalk(visits, currentPackage, MIN_FOREGROUND_MS) { visit, previous ->
-            visit.packageName !in SYSTEM_SURFACES &&
-                switchable(visit) &&
-                (visit.packageName == currentPackage ||
-                    !isPrivileged(visit.packageName) ||
-                    (previous != null && !switchable(previous)))
-        }
         // The system task list is the recents stack itself, so it matches what the user
         // sees and leaves out anything dismissed there. Usage events are the fallback for
         // when Shizuku is unavailable.
@@ -231,6 +224,13 @@ internal class AppSwitcher(
             }
         }
 
+        val apps = appWalk(visits, currentPackage, MIN_FOREGROUND_MS) { visit, previous ->
+            visit.packageName !in SYSTEM_SURFACES &&
+                switchable(visit) &&
+                (visit.packageName == currentPackage ||
+                    !isPrivileged(visit.packageName) ||
+                    (previous != null && !switchable(previous)))
+        }
         val currentIndex = currentPackage?.let { apps.indexOf(it) } ?: -1
         return Walk(apps, currentIndex)
     }

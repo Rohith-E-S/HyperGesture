@@ -146,4 +146,4 @@ private val HEADER = Regex("""^\s*\* Recent #\d+: Task\{[0-9a-f]+ #(\d+) type=(\
 
 private val HIDDEN_ID = Regex("""#(\d+) type=""")
 
-private val COMPONENT = Regex("""^\s*mActivityComponent=([^/\s]+)/""")
+private val COMPONENT = Regex("""^\s*(?:mActivityComponent|realActivity)=([^/\s]+)/""")
