@@ -18,11 +18,16 @@
 
 package com.h3nc4.hypergesture.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -48,11 +54,13 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.h3nc4.hypergesture.R
@@ -93,6 +101,7 @@ private val BackStackSaver = Saver<List<Screen>, ArrayList<String>>(
 @Composable
 private fun HyperGestureApp() {
     val model = rememberAppModel()
+    RequestNotificationPermission(model.record.serviceEverEnabled)
     // Held here rather than in Updates. The daily check runs on app open and home reads its result.
     val updates: UpdateViewModel = viewModel()
     LifecycleResumeEffect(updates) {
@@ -150,5 +159,33 @@ private fun HyperGestureApp() {
                 }
             }
         }
+    }
+}
+
+/**
+ * HyperOS can turn accessibility off across a reboot, and with the navigation bar hidden the
+ * notification is the only way back. Android 13+ needs this permission first, so ask once the
+ * service has actually run rather than on a first launch that may never reach setup.
+ */
+@Composable
+private fun RequestNotificationPermission(serviceEverEnabled: Boolean) {
+    val context = LocalContext.current
+    var asked by rememberSaveable { mutableStateOf(false) }
+    val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    LaunchedEffect(serviceEverEnabled, asked) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        if (!serviceEverEnabled || asked) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) return@LaunchedEffect
+        val activity = context.findActivity() ?: return@LaunchedEffect
+        // A refusal already answered here is not repeated; the system stops showing it anyway.
+        if (activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            return@LaunchedEffect
+        }
+        asked = true
+        request.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 }

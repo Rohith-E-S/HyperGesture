@@ -90,6 +90,7 @@ class NavigationRecoveryRunnerTest {
         val shell = FakeShell()
         val gateway = FakeGateway()
         var hyperOs = false
+        var setupComplete = true
         var now = 1_000L
         val runner = NavigationRecoveryRunner(
             store = store,
@@ -97,6 +98,7 @@ class NavigationRecoveryRunnerTest {
             shell = shell,
             gateway = gateway,
             isHyperOs = { hyperOs },
+            setupComplete = { setupComplete },
             packageName = "com.h3nc4.hypergesture",
             now = { now },
             scope = scope,
@@ -118,6 +120,31 @@ class NavigationRecoveryRunnerTest {
         assertNull(f.runner.run(RecoveryTrigger.MANUAL, force = true))
         assertTrue(f.shell.commands.isEmpty())
         assertTrue(f.store.records.isEmpty())
+    }
+
+    @Test
+    fun `incomplete setup never spawns the repair that hides the buttons`() = runBlocking {
+        val f = Fixture(this)
+        f.hyperOs = true
+        f.setupComplete = false
+
+        assertEquals(RecoveryStatus.SETUP_INCOMPLETE, f.runner.run(RecoveryTrigger.BOOT, force = true))
+
+        assertTrue(f.shell.commands.isEmpty())
+        assertEquals(
+            listOf(FakeStore.Record(RecoveryStatus.SETUP_INCOMPLETE, RecoveryTrigger.BOOT, 1_000L)),
+            f.store.records,
+        )
+    }
+
+    @Test
+    fun `incomplete setup leaves the buttons alone on a normal trigger too`() = runBlocking {
+        val f = Fixture(this)
+        f.setupComplete = false
+
+        assertEquals(RecoveryStatus.SETUP_INCOMPLETE, f.runner.run(RecoveryTrigger.SETTINGS_OBSERVER))
+
+        assertTrue(f.shell.commands.isEmpty())
     }
 
     @Test

@@ -19,8 +19,11 @@ package com.h3nc4.hypergesture.navigation
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.PowerManager
 import android.provider.Settings
+import com.h3nc4.hypergesture.diagnostics.DiagnosticsCollector
 import com.h3nc4.hypergesture.diagnostics.FailureLog
+import com.h3nc4.hypergesture.setup.setupState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -28,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
@@ -264,6 +268,8 @@ internal class NavigationRecoveryRunner(
     private val shell: ShellRunner,
     private val gateway: ShizukuGateway,
     private val isHyperOs: () -> Boolean,
+    /** Accessibility running, Autostart confirmed and Battery done, read when a repair is needed. */
+    private val setupComplete: suspend () -> Boolean,
     private val packageName: String,
     private val now: () -> Long,
     private val scope: CoroutineScope,
@@ -290,6 +296,12 @@ internal class NavigationRecoveryRunner(
         if (!forceRun && valuesAreCorrect(hyperOs)) {
             return finish(availability.status(), trigger)
         }
+        // The repair writes gestural navigation and disables the three-button overlay, which
+        // takes away the only navigation a user has when accessibility is not actually live.
+        // HyperOS can revoke it across a reboot, so the stored setup is not enough either.
+        if (!setupComplete()) {
+            return finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
+        }
         if (availability != ShizukuAvailability.Available) {
             return finish(availability.status(), trigger)
         }
@@ -299,6 +311,9 @@ internal class NavigationRecoveryRunner(
             if (!store.isEnabled()) return@withLock null
             if (!forceRun && valuesAreCorrect(hyperOs)) {
                 return@withLock finish(RecoveryStatus.VERIFIED, trigger)
+            }
+            if (!setupComplete()) {
+                return@withLock finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
             }
             finish(repair(forceRun, hyperOs), trigger)
         }
@@ -379,9 +394,30 @@ internal object NavigationRecoveryRuntime {
             shell = ShizukuShellRunner(),
             gateway = SystemShizukuGateway,
             isHyperOs = { NavigationModeReader.isHyperOsDevice() },
+            setupComplete = { safetySetupDone(context) },
             packageName = context.packageName,
             now = System::currentTimeMillis,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + failures),
         )
+    }
+
+    /**
+     * Read at repair time rather than when recovery is enabled: HyperOS can revoke
+     * accessibility across a reboot, and the navigation buttons must stay whenever
+     * gestures cannot actually run. The battery and autostart steps are the user's
+     * confirmations from the setup checklist.
+     */
+    private suspend fun safetySetupDone(context: Context): Boolean {
+        // An unreadable store reads as "not set up", which keeps the buttons rather than
+        // letting a corrupt file make the repair hide them.
+        val record = runCatching { context.setupState.record.first() }.getOrNull() ?: return false
+        // The checklist's "done" is the live service, not merely the Accessibility toggle.
+        val accessibilityDone = DiagnosticsCollector.isAccessibilityServiceRunning()
+        // A yes is trusted; HyperOS keeps its own Power setting, so a no proves nothing there.
+        val batteryUnrestricted = context.getSystemService(PowerManager::class.java)
+            ?.isIgnoringBatteryOptimizations(context.packageName) == true
+        val batteryDone = batteryUnrestricted || record.batteryConfirmed
+        val autostartDone = !NavigationModeReader.isHyperOsDevice() || record.autostartConfirmed
+        return accessibilityDone && batteryDone && autostartDone
     }
 }

@@ -51,7 +51,10 @@ import com.h3nc4.hypergesture.navigation.NavigationSettingsObserver
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 import com.h3nc4.hypergesture.navigation.WATCHDOG_GRACE_MS
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
+import com.h3nc4.hypergesture.setup.AccessibilityAlert
 import com.h3nc4.hypergesture.setup.GestureTileService
+import com.h3nc4.hypergesture.setup.SetupFlag
+import com.h3nc4.hypergesture.setup.setupState
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -111,12 +114,27 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         super.onServiceConnected()
         instance = this
         runningState.value = true
-        try {
+        // Gestures run again, so an alert posted while they did not has served its purpose.
+        AccessibilityAlert.cancel(this)
+        // Recorded here, not only from the UI, so a boot revoke still has proof the user
+        // had gestures running and deserves the way back.
+        scope.launch(Dispatchers.IO) {
+            applicationContext.setupState.set(SetupFlag.SERVICE_EVER_ENABLED, true)
+        }
+        val ready = try {
             setUp()
+            true
         } catch (t: Throwable) {
             FailureLog.record(this, "onServiceConnected", t)
+            false
         }
         GestureTileService.requestRefresh(this)
+        // Only a service that actually installed its overlays should let recovery hide the
+        // buttons. This is also the first moment after a reboot when the setup can be live.
+        if (ready) {
+            NavigationRecoveryRuntime.runner(applicationContext)
+                .launch(RecoveryTrigger.SERVICE_CONNECTED)
+        }
     }
 
     private fun setUp() {
@@ -151,6 +169,9 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        // Checked after a grace: UiAutomation unbinds for a moment, but a real revoke must
+        // leave an alert that survives the app being swiped out of Recents.
+        AccessibilityAlert.refreshSoon(this)
         teardown()
         GestureTileService.requestRefresh(this)
         return super.onUnbind(intent)

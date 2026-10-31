@@ -35,9 +35,13 @@ HyperGesture has an explicit, off-by-default Shizuku option that maintains `Sett
 
 ### Probe first, repair only on mismatch
 
-Non-forced triggers start with a zero-process read of the target values through the app's own `ContentResolver`; on HyperOS that includes `use_gesture_version_three`, so a gesture flag reset on its own still triggers a repair. Those reads need no permission, so a steady state costs no Shizuku call and spawns no shell. Only a mismatch reaches Shizuku, and the script re-checks the values itself before writing, so a probe that raced a repair does not write again. The script is generated from the same target list the probe verifies, so the two cannot drift. Forced triggers (enable, boot, self-update, or an ungranted exemption) skip the probe and write unconditionally.
+Non-forced triggers start with a zero-process read of the target values through the app's own `ContentResolver`; on HyperOS that includes `use_gesture_version_three`, so a gesture flag reset on its own still triggers a repair. Those reads need no permission, so a steady state costs no Shizuku call and spawns no shell. Only a mismatch reaches Shizuku, and the script re-checks the values itself before writing, so a probe that raced a repair does not write again. The script is generated from the same target list the probe verifies, so the two cannot drift. Forced triggers (enable, boot, self-update, or an ungranted exemption) skip the probe and write unconditionally, subject to the setup guard below.
 
 The repair also disables the three-button overlay when it is active, but only on HyperOS builds. The overlay state cannot be read without a shell, so it is re-applied whenever a target mismatch or a forced run reaches the script. Shell output is drained while the command runs, so a chatty `cmd overlay list` cannot fill the pipe buffer and hang the wait. Shizuku's shell runs as user 0, which is the user these settings target, so the commands carry no explicit `--user` flag.
+
+### The buttons stay until the safety setup is live
+
+Before any repair, the runner checks the same facts as the setup checklist: the accessibility service must be running right now, and the Autostart and Battery steps must be marked done (Battery also counts when the app already ignores battery optimizations). If any is missing, the run records `SETUP_INCOMPLETE` and stops before spawning a shell. This matters because HyperOS can revoke accessibility across a reboot: without the guard, the forced boot repair would write gestural mode and disable the three-button overlay while the gestures are dead, leaving the phone with no way to navigate. The check runs at repair time, not when recovery is enabled, so a stale "done" from before the restart cannot cause it.
 
 ### Exemptions belong to forced runs
 
@@ -49,7 +53,8 @@ The app-ops grants (10008, 10021, usage stats), the doze whitelist entry and the
 | --- | --- | --- |
 | Enable / disable | Recovery card | Enabling forces a run; disabling cancels the periodic work |
 | App resume, manual check | `AppModel` and the recovery card | Probe only; forces while an exemption grant is still pending |
-| Boot | `BOOT_COMPLETED` | Forced; HyperOS resets the mode across a reboot |
+| Boot | `BOOT_COMPLETED` | Forced, but skipped unless accessibility is already running |
+| Service connected | `HyperGestureAccessibilityService.onServiceConnected` | Probe only; runs once the safety setup can actually be complete |
 | Settings change | ContentObserver in the accessibility service | A repair re-enters the observer with correct values, which stops the loop |
 | Default home change | `ACTION_PREFERRED_ACTIVITY_CHANGED`, registered at runtime | Fires only while the accessibility service is connected |
 | App installed or removed | `PACKAGE_ADDED` / `PACKAGE_REMOVED`, registered at runtime | Same requirement |
@@ -66,6 +71,7 @@ HyperOS's watchdog can reset the settings shortly after the broadcast, so a laun
 - `COMMAND_FAILED` — the shell exited non-zero or timed out and the readback was still wrong.
 - `NOT_VERIFIED` — the commands succeeded but the readback did not stick, usually the vendor watchdog reverting them.
 - `SHIZUKU_UNAVAILABLE`, `PERMISSION_DENIED` — no repair was attempted.
+- `SETUP_INCOMPLETE` — accessibility is not running, or Autostart/Battery are not done, so no repair was attempted and the navigation buttons were left alone.
 - `DISABLED` — recovery is off.
 
 The readback outranks the exit code: a timed-out script that landed both values still reports `VERIFIED`. The card shows the status, when the last check ran, and which trigger caused it. Legacy `WRITE_FAILED` records from older builds read as `COMMAND_FAILED`.
