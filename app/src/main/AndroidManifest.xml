@@ -25,6 +25,10 @@
          This one is for the navigation subsystem, as Android rebinds the service after boot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
+    <!-- The gestures-off alert. Without it Android 13+ drops the notification that is the
+         only way back when a reboot revokes accessibility and the navigation bar is hidden. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <!-- The opt-in update check, the app's only network use. Installing goes through

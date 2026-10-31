@@ -25,6 +25,7 @@ import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
+import com.h3nc4.hypergesture.setup.AccessibilityAlert
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,6 +53,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                             "gestural navigation was not restored by the system.",
                     )
                 }
+                // HyperOS can revoke accessibility across a reboot. The alert is the only
+                // route back once the navigation bar is hidden and the app leaves Recents.
+                AccessibilityAlert.refresh(appContext)
             } finally {
                 pending.finish()
             }

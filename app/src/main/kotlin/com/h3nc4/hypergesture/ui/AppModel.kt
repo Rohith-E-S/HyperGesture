@@ -121,7 +121,13 @@ internal class AppModel(
     }
 
     fun setFlag(flag: SetupFlag, value: Boolean) {
-        scope.launch { setupState.set(flag, value) }
+        scope.launch {
+            setupState.set(flag, value)
+            // These two steps gate the Shizuku repair, so completing them must unpause it.
+            if (flag == SetupFlag.AUTOSTART_CONFIRMED || flag == SetupFlag.BATTERY_CONFIRMED) {
+                checkRecovery()
+            }
+        }
     }
 
     fun setRecoveryEnabled(enabled: Boolean) {

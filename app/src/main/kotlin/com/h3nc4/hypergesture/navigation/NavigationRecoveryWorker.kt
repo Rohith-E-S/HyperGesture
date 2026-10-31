@@ -19,6 +19,7 @@ package com.h3nc4.hypergesture.navigation
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.h3nc4.hypergesture.setup.AccessibilityAlert
 
 class NavigationRecoveryWorker(context: Context, parameters: WorkerParameters) :
     CoroutineWorker(context, parameters) {
@@ -26,6 +27,8 @@ class NavigationRecoveryWorker(context: Context, parameters: WorkerParameters) :
     override suspend fun doWork(): Result {
         // Await the run: returning early lets WorkManager stop the process mid-repair.
         NavigationRecoveryRuntime.runner(applicationContext).run(RecoveryTrigger.PERIODIC)
+        // The periodic pass is also the only check that happens without opening the app.
+        AccessibilityAlert.refresh(applicationContext)
         return Result.success()
     }
 }

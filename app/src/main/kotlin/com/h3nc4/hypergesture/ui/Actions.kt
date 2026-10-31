@@ -45,7 +45,7 @@ internal fun Context.startFirst(vararg candidates: Intent) {
     }
 }
 
-private fun Context.findActivity(): Activity? {
+internal fun Context.findActivity(): Activity? {
     var context: Context? = this
     while (context is ContextWrapper) {
         if (context is Activity) return context

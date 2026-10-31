@@ -41,6 +41,13 @@
     <string name="action_turn_on">Turn on</string>
     <string name="action_fix">Fix</string>
 
+    <!-- Kept in the shade while gestures are off, after HyperOS revokes accessibility on a
+         restart and the hidden navigation bar would otherwise leave no way back. -->
+    <string name="alert_channel_name">Gestures off</string>
+    <string name="alert_channel_description">Warns when HyperOS turns HyperGesture\'s accessibility access off.</string>
+    <string name="alert_gestures_off_title">Gestures are off</string>
+    <string name="alert_gestures_off_body">HyperGesture lost accessibility access, so Back, Home and Recents stop working. Tap here or use Turn on to restore them.</string>
+
     <!-- Setup checklist. -->
     <string name="section_setup">Setup</string>
     <plurals name="setup_progress">
@@ -95,9 +102,11 @@
     <string name="recovery_status_verified">Active. Gestural mode verified (force_fsg=1, nav_mode=2), 3-button overlay suppressed, and MIUI cleaner immunity granted.</string>
     <string name="recovery_status_command_failed">The repair could not run. Check that Shizuku is running and that HyperGesture still has permission.</string>
     <string name="recovery_status_not_verified">The repair ran, but reading the settings back did not show gestural mode. This build may refuse the change.</string>
+    <string name="recovery_status_setup_incomplete">Paused. Turn accessibility on and mark Autostart and Battery done first. Until then the navigation buttons are left alone, so a revoked service can never leave the phone with no navigation.</string>
     <string name="recovery_last_check">Last check %1$s · %2$s</string>
     <string name="recovery_trigger_manual">manual</string>
     <string name="recovery_trigger_app_open">app opened</string>
+    <string name="recovery_trigger_service_connected">service connected</string>
     <string name="recovery_trigger_boot">after boot</string>
     <string name="recovery_trigger_settings_change">settings changed</string>
     <string name="recovery_trigger_launcher_change">launcher changed</string>

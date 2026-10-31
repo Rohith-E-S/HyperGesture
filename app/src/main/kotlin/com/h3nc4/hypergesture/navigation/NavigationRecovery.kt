@@ -50,11 +50,19 @@ enum class RecoveryStatus {
 
     /** The shell ran, but reading the settings back did not show the expected values. */
     NOT_VERIFIED,
+
+    /**
+     * Accessibility, Autostart and Battery are not all done, so the repair is skipped and
+     * the navigation buttons stay. Hiding them while gestures cannot run would strand the user.
+     */
+    SETUP_INCOMPLETE,
 }
 
 enum class RecoveryTrigger {
     MANUAL,
     RESUME,
+    /** The service just bound, which is the first moment the safety setup can be complete. */
+    SERVICE_CONNECTED,
     BOOT,
     SETTINGS_OBSERVER,
     PREFERRED_HOME,

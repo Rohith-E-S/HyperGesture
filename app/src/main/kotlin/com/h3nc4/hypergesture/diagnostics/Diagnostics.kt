@@ -99,6 +99,9 @@ object DiagnosticsCollector {
             .any { it.resolveInfo?.serviceInfo?.name == target }
     }
 
+    /** The live instance, which is what the checklist's WORKING state means; a bound but stopped service reads false. */
+    fun isAccessibilityServiceRunning(): Boolean = HyperGestureAccessibilityService.isRunning()
+
     fun isAccessibilityServiceSwitchedOn(context: Context): Boolean = isServiceListed(
         runCatching {
             Settings.Secure.getString(

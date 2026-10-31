@@ -24,7 +24,7 @@ In landscape the first bottom swipe only shows a pill, and a second one within 2
 2. Allow restricted settings under Settings › Apps › HyperGesture › ⋮ › **Allow restricted settings**.
 3. Turn it on under Settings › Accessibility › **HyperGesture**, then open the app. Its setup checklist covers the rest.
 
-If the gestures stop, the app's Troubleshooting screen has the fixes.
+HyperOS can turn accessibility off when the phone restarts. Allow notifications to get a persistent **Gestures are off** notification that leads back to the switch, which stays in the shade even after the app is swiped out of Recents. If the gestures stop, the app's Troubleshooting screen has the rest of the fixes.
 
 ## Privacy
 
@@ -36,7 +36,9 @@ It can't switch on HyperOS's own gesture navigation, since only the system is al
 
 ## Navigation setting recovery
 
-HyperOS resets full-screen gestures at boot, when a third-party launcher becomes the default home, and whenever SystemUI's MIUI watchdog runs. This opt-in switch in the setup checklist undoes those resets through Shizuku. It writes `Settings.Global force_fsg_nav_bar=1` and `Settings.Secure navigation_mode=2` for the current user and user 0, reads both back, sets MIUI's gesture-version flag, and disables the three-button overlay when it is active. The same pass grants HyperGesture MIUI's autostart and battery-saver exemptions, usage stats, a doze whitelist entry and an active standby bucket, so the vendor cleaner does not kill the service that performs the checks. It leaves accessibility configuration and gesture tuning alone, and it does not turn on HyperOS's native gesture engine. HyperGesture's own gestures remain responsible for Back, Home and Recents.
+HyperOS resets full-screen gestures at boot, when a third-party launcher becomes the default home, and whenever SystemUI's MIUI watchdog runs. This opt-in switch in the setup checklist undoes those resets through Shizuku. It writes `Settings.Global force_fsg_nav_bar=1` and `Settings.Secure navigation_mode=2` for the current user and user 0, reads both back, sets MIUI's gesture-version flag, and disables the three-button overlay when it is active. The same pass grants HyperGesture MIUI's autostart and battery-saver exemptions, usage stats, a doze whitelist entry and an active standby bucket, so the vendor cleaner does not kill the service that performs the checks. It leaves accessibility configuration and gesture tuning alone, and it does not turn on HyperOS's native gesture engine.
+
+The repair only runs while accessibility is actually running and the Autostart and Battery steps are marked done. If any of those is missing, it leaves the navigation bar alone, so a service HyperOS revoked cannot leave the phone without navigation buttons. HyperGesture's own gestures remain responsible for Back, Home and Recents.
 
 Install and start [Shizuku](https://shizuku.rikka.app/download/), grant HyperGesture Shizuku permission, then turn on **Navigation setting recovery (Shizuku)**. Commands run directly through Shizuku rather than a UserService, which avoids a UserService startup crash on some MediaTek builds. Checks run when HyperGesture resumes, when Shizuku becomes available, after boot, after package or default-home changes (each followed by a second check 1.5 seconds later to catch MIUI's delayed reset), on every observed change of either setting through a ContentObserver the accessibility service registers, and from an inexact 15-minute WorkManager fallback. The card and the Troubleshooting screen report whether both values verified, Shizuku is not running, permission is missing, or a write failed. The manual **Open navigation settings** action remains available.
 

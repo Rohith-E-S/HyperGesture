@@ -49,6 +49,7 @@ internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifi
             RecoveryStatus.VERIFIED -> R.string.recovery_status_verified
             RecoveryStatus.COMMAND_FAILED -> R.string.recovery_status_command_failed
             RecoveryStatus.NOT_VERIFIED -> R.string.recovery_status_not_verified
+            RecoveryStatus.SETUP_INCOMPLETE -> R.string.recovery_status_setup_incomplete
         },
     )
     Card(
@@ -111,6 +112,7 @@ internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifi
 private fun triggerLabel(trigger: RecoveryTrigger?): String = when (trigger) {
     RecoveryTrigger.MANUAL -> stringResource(R.string.recovery_trigger_manual)
     RecoveryTrigger.RESUME -> stringResource(R.string.recovery_trigger_app_open)
+    RecoveryTrigger.SERVICE_CONNECTED -> stringResource(R.string.recovery_trigger_service_connected)
     RecoveryTrigger.BOOT -> stringResource(R.string.recovery_trigger_boot)
     RecoveryTrigger.SETTINGS_OBSERVER -> stringResource(R.string.recovery_trigger_settings_change)
     RecoveryTrigger.PREFERRED_HOME -> stringResource(R.string.recovery_trigger_launcher_change)
