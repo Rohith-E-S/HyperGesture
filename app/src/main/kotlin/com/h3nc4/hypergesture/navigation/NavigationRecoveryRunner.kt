@@ -279,6 +279,26 @@ internal object NavigationRecoveryScript {
         }
     }.joinToString("\n")
 
+    fun buildRestoreAccessibilityService(packageName: String): String {
+        require(PACKAGE_NAME.matches(packageName)) { "Unexpected package name: $packageName" }
+        val target = "$packageName/$packageName.service.HyperGestureAccessibilityService"
+        return """
+            curr="$(settings get secure enabled_accessibility_services 2>/dev/null)"
+            case ":${'$'}curr:" in
+              *":$target:"*|*":$packageName/.service.HyperGestureAccessibilityService:"*)
+                ;;
+              *)
+                if [ -z "${'$'}curr" ] || [ "${'$'}curr" = "null" ]; then
+                  settings put secure enabled_accessibility_services "$target"
+                else
+                  settings put secure enabled_accessibility_services "${'$'}curr:$target"
+                fi
+                ;;
+            esac
+            settings put secure accessibility_enabled 1
+        """.trimIndent()
+    }
+
     private const val EXEMPTIONS_MARKER = "EXEMPTIONS="
 }
 
@@ -290,6 +310,7 @@ internal class NavigationRecoveryRunner(
     private val isHyperOs: () -> Boolean,
     /** Accessibility running, Autostart confirmed and Battery done, read when a repair is needed. */
     private val setupComplete: suspend () -> Boolean,
+    private val serviceEverEnabled: suspend () -> Boolean = { false },
     private val packageName: String,
     private val now: () -> Long,
     private val scope: CoroutineScope,
@@ -317,14 +338,19 @@ internal class NavigationRecoveryRunner(
         // takes away the only navigation a user has when accessibility is not actually live.
         // HyperOS can revoke it across a reboot or battery saver, so the stored setup is not enough either.
         if (!setupComplete()) {
-            if (availability == ShizukuAvailability.Available && buttonsHidden()) {
+            if (availability == ShizukuAvailability.Available) {
                 repairMutex.withLock {
+                    if (serviceEverEnabled()) {
+                        restoreAccessibilityService()
+                    }
                     if (!setupComplete() && buttonsHidden()) {
                         restoreButtons(hyperOs)
                     }
                 }
             }
-            return finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
+            if (!setupComplete()) {
+                return finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
+            }
         }
         if (!forceRun && valuesAreCorrect(hyperOs)) {
             return finish(availability.status(), trigger)
@@ -337,10 +363,17 @@ internal class NavigationRecoveryRunner(
             // A run that queued behind another may already have repaired the values.
             if (!store.isEnabled()) return@withLock null
             if (!setupComplete()) {
-                if (availability == ShizukuAvailability.Available && buttonsHidden()) {
-                    restoreButtons(hyperOs)
+                if (availability == ShizukuAvailability.Available) {
+                    if (serviceEverEnabled()) {
+                        restoreAccessibilityService()
+                    }
+                    if (!setupComplete() && buttonsHidden()) {
+                        restoreButtons(hyperOs)
+                    }
                 }
-                return@withLock finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
+                if (!setupComplete()) {
+                    return@withLock finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
+                }
             }
             if (!forceRun && valuesAreCorrect(hyperOs)) {
                 return@withLock finish(RecoveryStatus.VERIFIED, trigger)
@@ -386,6 +419,17 @@ internal class NavigationRecoveryRunner(
 
     private suspend fun restoreButtons(hyperOs: Boolean) {
         val script = NavigationRecoveryScript.buildRestoreButtons(hyperOs)
+        try {
+            shell.exec(script, SHELL_TIMEOUT_SECONDS)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Best effort restoration
+        }
+    }
+
+    private suspend fun restoreAccessibilityService() {
+        val script = NavigationRecoveryScript.buildRestoreAccessibilityService(packageName)
         try {
             shell.exec(script, SHELL_TIMEOUT_SECONDS)
         } catch (cancelled: CancellationException) {
@@ -441,6 +485,9 @@ internal object NavigationRecoveryRuntime {
             gateway = SystemShizukuGateway,
             isHyperOs = { NavigationModeReader.isHyperOsDevice() },
             setupComplete = { safetySetupDone(context) },
+            serviceEverEnabled = {
+                runCatching { context.setupState.record.first().serviceEverEnabled }.getOrDefault(false)
+            },
             packageName = context.packageName,
             now = System::currentTimeMillis,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + failures),
