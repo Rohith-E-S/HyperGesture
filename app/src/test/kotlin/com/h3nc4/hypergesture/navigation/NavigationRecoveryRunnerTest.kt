@@ -91,6 +91,7 @@ class NavigationRecoveryRunnerTest {
         val gateway = FakeGateway()
         var hyperOs = false
         var setupComplete = true
+        var serviceEverEnabled = false
         var now = 1_000L
         val runner = NavigationRecoveryRunner(
             store = store,
@@ -99,6 +100,7 @@ class NavigationRecoveryRunnerTest {
             gateway = gateway,
             isHyperOs = { hyperOs },
             setupComplete = { setupComplete },
+            serviceEverEnabled = { serviceEverEnabled },
             packageName = "com.h3nc4.hypergesture",
             now = { now },
             scope = scope,
@@ -160,6 +162,37 @@ class NavigationRecoveryRunnerTest {
         assertTrue(f.shell.commands.single().contains("settings put global force_fsg_nav_bar 0"))
         assertTrue(f.shell.commands.single().contains("settings put secure navigation_mode 0"))
         assertTrue(f.shell.commands.single().contains("cmd overlay enable com.android.internal.systemui.navbar.threebutton"))
+    }
+
+    @Test
+    fun `incomplete setup restores accessibility service for user who had it enabled`() = runBlocking {
+        val f = Fixture(this)
+        f.setupComplete = false
+        f.serviceEverEnabled = true
+
+        assertEquals(RecoveryStatus.SETUP_INCOMPLETE, f.runner.run(RecoveryTrigger.RESUME))
+
+        assertFalse(f.shell.commands.isEmpty())
+        assertTrue(f.shell.commands.any {
+            it.contains("settings put secure enabled_accessibility_services") &&
+                it.contains("com.h3nc4.hypergesture") &&
+                it.contains("settings put secure accessibility_enabled 1")
+        })
+    }
+
+    @Test
+    fun `incomplete setup proceeds to verified once accessibility service and setup are restored`() = runBlocking {
+        val f = Fixture(this)
+        f.setupComplete = false
+        f.serviceEverEnabled = true
+        f.values(correct = true)
+        f.shell.onExec = { command ->
+            if (command.contains("enabled_accessibility_services")) {
+                f.setupComplete = true
+            }
+        }
+
+        assertEquals(RecoveryStatus.VERIFIED, f.runner.run(RecoveryTrigger.RESUME))
     }
 
     @Test
