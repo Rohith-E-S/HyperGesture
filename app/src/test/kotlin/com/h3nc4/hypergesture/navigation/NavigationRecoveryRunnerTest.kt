@@ -148,6 +148,30 @@ class NavigationRecoveryRunnerTest {
     }
 
     @Test
+    fun `incomplete setup restores buttons if they were hidden`() = runBlocking {
+        val f = Fixture(this)
+        f.hyperOs = true
+        f.setupComplete = false
+        f.values(correct = true)
+
+        assertEquals(RecoveryStatus.SETUP_INCOMPLETE, f.runner.run(RecoveryTrigger.BOOT, force = true))
+
+        assertFalse(f.shell.commands.isEmpty())
+        assertTrue(f.shell.commands.single().contains("settings put global force_fsg_nav_bar 0"))
+        assertTrue(f.shell.commands.single().contains("settings put secure navigation_mode 0"))
+        assertTrue(f.shell.commands.single().contains("cmd overlay enable com.android.internal.systemui.navbar.threebutton"))
+    }
+
+    @Test
+    fun `incomplete setup checks setup first even if values are currently gestural`() = runBlocking {
+        val f = Fixture(this)
+        f.setupComplete = false
+        f.values(correct = true)
+
+        assertEquals(RecoveryStatus.SETUP_INCOMPLETE, f.runner.run(RecoveryTrigger.PERIODIC))
+    }
+
+    @Test
     fun `correct values need no process at all`() = runBlocking {
         val f = Fixture(this)
         f.values(correct = true)

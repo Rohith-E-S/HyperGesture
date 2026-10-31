@@ -41,7 +41,7 @@ The repair also disables the three-button overlay when it is active, but only on
 
 ### The buttons stay until the safety setup is live
 
-Before any repair, the runner checks the same facts as the setup checklist: the accessibility service must be running right now, and the Autostart and Battery steps must be marked done (Battery also counts when the app already ignores battery optimizations). If any is missing, the run records `SETUP_INCOMPLETE` and stops before spawning a shell. This matters because HyperOS can revoke accessibility across a reboot: without the guard, the forced boot repair would write gestural mode and disable the three-button overlay while the gestures are dead, leaving the phone with no way to navigate. The check runs at repair time, not when recovery is enabled, so a stale "done" from before the restart cannot cause it.
+Before any repair, the runner checks the same facts as the setup checklist: the accessibility service must be running right now, and the Autostart and Battery steps must be marked done (Battery also counts when the app already ignores battery optimizations). If any is missing, the run records `SETUP_INCOMPLETE`, restores the three-button navigation bar if it was hidden, and stops before applying gesture mode. This matters because HyperOS can revoke accessibility across a reboot or during Ultra Battery Saver: without this, the user would be left without gestures or navigation buttons. The check runs at repair time, not when recovery is enabled, so a stale "done" from before the restart cannot cause it.
 
 ### Exemptions belong to forced runs
 
