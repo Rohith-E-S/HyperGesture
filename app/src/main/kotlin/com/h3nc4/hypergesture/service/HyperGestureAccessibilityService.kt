@@ -169,11 +169,11 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
-        // Checked after a grace: UiAutomation unbinds for a moment, but a real revoke must
-        // leave an alert that survives the app being swiped out of Recents.
-        AccessibilityAlert.refreshSoon(this)
         teardown()
+        AccessibilityAlert.refreshSoon(this)
         GestureTileService.requestRefresh(this)
+        NavigationRecoveryRuntime.runner(applicationContext)
+            .launch(RecoveryTrigger.SETTINGS_OBSERVER)
         return super.onUnbind(intent)
     }
 

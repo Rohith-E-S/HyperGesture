@@ -43,6 +43,7 @@ import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRepository
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryState
+import com.h3nc4.hypergesture.setup.AccessibilityAlert
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
@@ -111,6 +112,7 @@ internal class AppModel(
         assistant = readAssistant(context)
         batteryUnrestricted = batteryUnrestricted(context)
         checkRecovery()
+        scope.launch { AccessibilityAlert.refresh(context) }
         if (status != ServiceStatus.OFF && !record.serviceEverEnabled) {
             setFlag(SetupFlag.SERVICE_EVER_ENABLED, true)
         }

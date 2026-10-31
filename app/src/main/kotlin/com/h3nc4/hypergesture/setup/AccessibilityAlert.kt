@@ -60,17 +60,14 @@ object AccessibilityAlert {
     private const val REQUEST_OPEN_APP = 1
     private const val REQUEST_TURN_ON = 2
 
-    /** UiAutomation unbinds the service for a moment, so a stop has to outlast that. */
-    private const val UNBIND_GRACE_MS = 3_000L
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /** Posts when the service is not bound for a user who had it, and clears it otherwise. */
+    /** Posts when the service is not running for a user who had it, and clears it otherwise. */
     suspend fun refresh(context: Context) {
         val app = context.applicationContext
         try {
             val serviceEverEnabled = app.setupState.record.first().serviceEverEnabled
-            val bound = DiagnosticsCollector.isAccessibilityServiceEnabled(app)
+            val bound = DiagnosticsCollector.isAccessibilityServiceRunning()
             if (shouldShowGesturesOffAlert(bound, serviceEverEnabled)) post(app) else cancel(app)
         } catch (cancelled: CancellationException) {
             throw cancelled
@@ -80,11 +77,10 @@ object AccessibilityAlert {
         }
     }
 
-    /** For an unbind, where the framework still reports the service as bound for a moment. */
+    /** For an unbind, where the service has stopped and the alert must be posted immediately. */
     fun refreshSoon(context: Context) {
         val app = context.applicationContext
         scope.launch {
-            delay(UNBIND_GRACE_MS)
             refresh(app)
         }
     }

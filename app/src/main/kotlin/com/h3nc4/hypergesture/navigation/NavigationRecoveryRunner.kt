@@ -64,6 +64,9 @@ internal object NavigationSettingTargets {
         val flag = hyperOs.single()
         return values[flag.key]?.let { it == flag.value } ?: true
     }
+
+    fun buttonsHidden(values: Map<String, String?>): Boolean =
+        values["force_fsg_nav_bar"] == "1" || values["navigation_mode"] == "2"
 }
 
 internal data class SettingTarget(val namespace: String, val key: String, val value: String)
@@ -259,6 +262,23 @@ internal object NavigationRecoveryScript {
     fun grantsSucceeded(output: String): Boolean =
         output.lineSequence().any { it.trim() == "${EXEMPTIONS_MARKER}1" }
 
+    fun buildRestoreButtons(hyperOs: Boolean): String = buildList {
+        add("settings put global force_fsg_nav_bar 0")
+        add("settings put secure navigation_mode 0")
+        if (hyperOs) {
+            add(
+                """
+                if cmd overlay list 2>/dev/null | grep -q '\[ \] com.android.internal.systemui.navbar.threebutton'; then
+                  cmd overlay enable com.android.internal.systemui.navbar.threebutton 2>/dev/null || true
+                fi
+                if cmd overlay list 2>/dev/null | grep -q '\[x\] com.android.internal.systemui.navbar.gestural'; then
+                  cmd overlay disable com.android.internal.systemui.navbar.gestural 2>/dev/null || true
+                fi
+                """.trimIndent(),
+            )
+        }
+    }.joinToString("\n")
+
     private const val EXEMPTIONS_MARKER = "EXEMPTIONS="
 }
 
@@ -293,14 +313,21 @@ internal class NavigationRecoveryRunner(
         val hyperOs = isHyperOs()
 
         val availability = gateway.availability()
-        if (!forceRun && valuesAreCorrect(hyperOs)) {
-            return finish(availability.status(), trigger)
-        }
         // The repair writes gestural navigation and disables the three-button overlay, which
         // takes away the only navigation a user has when accessibility is not actually live.
-        // HyperOS can revoke it across a reboot, so the stored setup is not enough either.
+        // HyperOS can revoke it across a reboot or battery saver, so the stored setup is not enough either.
         if (!setupComplete()) {
+            if (availability == ShizukuAvailability.Available && buttonsHidden()) {
+                repairMutex.withLock {
+                    if (!setupComplete() && buttonsHidden()) {
+                        restoreButtons(hyperOs)
+                    }
+                }
+            }
             return finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
+        }
+        if (!forceRun && valuesAreCorrect(hyperOs)) {
+            return finish(availability.status(), trigger)
         }
         if (availability != ShizukuAvailability.Available) {
             return finish(availability.status(), trigger)
@@ -309,11 +336,14 @@ internal class NavigationRecoveryRunner(
         return repairMutex.withLock {
             // A run that queued behind another may already have repaired the values.
             if (!store.isEnabled()) return@withLock null
+            if (!setupComplete()) {
+                if (availability == ShizukuAvailability.Available && buttonsHidden()) {
+                    restoreButtons(hyperOs)
+                }
+                return@withLock finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
+            }
             if (!forceRun && valuesAreCorrect(hyperOs)) {
                 return@withLock finish(RecoveryStatus.VERIFIED, trigger)
-            }
-            if (!setupComplete()) {
-                return@withLock finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
             }
             finish(repair(forceRun, hyperOs), trigger)
         }
@@ -352,6 +382,22 @@ internal class NavigationRecoveryRunner(
         NavigationSettingTargets.verified(
             runCatching { settings.navigationValues() }.getOrDefault(emptyMap()),
             includeHyperOs = hyperOs,
+        )
+
+    private suspend fun restoreButtons(hyperOs: Boolean) {
+        val script = NavigationRecoveryScript.buildRestoreButtons(hyperOs)
+        try {
+            shell.exec(script, SHELL_TIMEOUT_SECONDS)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Best effort restoration
+        }
+    }
+
+    private fun buttonsHidden(): Boolean =
+        NavigationSettingTargets.buttonsHidden(
+            runCatching { settings.navigationValues() }.getOrDefault(emptyMap()),
         )
 
     private suspend fun finish(status: RecoveryStatus, trigger: RecoveryTrigger): RecoveryStatus {
