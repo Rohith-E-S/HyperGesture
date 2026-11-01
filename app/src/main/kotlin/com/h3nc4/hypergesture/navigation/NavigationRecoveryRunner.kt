@@ -227,10 +227,10 @@ internal object NavigationRecoveryScript {
         }
         val body = if (guard) {
             val mismatch = targets.joinToString(" || ") {
-                "\"\$(settings get ${it.namespace} ${it.key})\" != \"${it.value}\""
+                "[ \"\$(settings get ${it.namespace} ${it.key})\" != \"${it.value}\" ]"
             }
             buildString {
-                appendLine("if [ $mismatch ]; then")
+                appendLine("if $mismatch; then")
                 repairs.forEach { appendLine(it.prependIndent("  ")) }
                 appendLine("fi")
             }

@@ -86,6 +86,7 @@ class NavigationSettingTargetsTest {
         assertTrue(script.contains("dumpsys deviceidle whitelist +com.h3nc4.hypergesture"))
         assertTrue(script.contains("am set-standby-bucket com.h3nc4.hypergesture active"))
         assertTrue(script.contains("use_gesture_version_three"))
+        assertTrue(script.contains("if [ \"\$(settings get global force_fsg_nav_bar)\" != \"1\" ] || [ \"\$(settings get secure navigation_mode)\" != \"2\" ]"))
         assertFalse("the duplicate user 0 writes are gone", script.contains("--user 0"))
     }
 
