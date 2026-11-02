@@ -337,21 +337,7 @@ internal class NavigationRecoveryRunner(
         // The repair writes gestural navigation and disables the three-button overlay, which
         // takes away the only navigation a user has when accessibility is not actually live.
         // HyperOS can revoke it across a reboot or battery saver, so the stored setup is not enough either.
-        if (!setupComplete()) {
-            if (availability == ShizukuAvailability.Available) {
-                repairMutex.withLock {
-                    if (serviceEverEnabled()) {
-                        restoreAccessibilityService()
-                    }
-                    if (!setupComplete() && buttonsHidden()) {
-                        restoreButtons(hyperOs)
-                    }
-                }
-            }
-            if (!setupComplete()) {
-                return finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
-            }
-        }
+        ensureSetup(availability, hyperOs)?.let { return finish(it, trigger) }
         if (!forceRun && valuesAreCorrect(hyperOs)) {
             return finish(availability.status(), trigger)
         }
@@ -362,24 +348,34 @@ internal class NavigationRecoveryRunner(
         return repairMutex.withLock {
             // A run that queued behind another may already have repaired the values.
             if (!store.isEnabled()) return@withLock null
-            if (!setupComplete()) {
-                if (availability == ShizukuAvailability.Available) {
-                    if (serviceEverEnabled()) {
-                        restoreAccessibilityService()
-                    }
-                    if (!setupComplete() && buttonsHidden()) {
-                        restoreButtons(hyperOs)
-                    }
-                }
-                if (!setupComplete()) {
-                    return@withLock finish(RecoveryStatus.SETUP_INCOMPLETE, trigger)
-                }
-            }
+            ensureSetupLocked(hyperOs)?.let { return@withLock finish(it, trigger) }
             if (!forceRun && valuesAreCorrect(hyperOs)) {
                 return@withLock finish(RecoveryStatus.VERIFIED, trigger)
             }
             finish(repair(forceRun, hyperOs), trigger)
         }
+    }
+
+    /** Takes [repairMutex]; Shizuku unavailable means only the missing step to report. */
+    private suspend fun ensureSetup(
+        availability: ShizukuAvailability,
+        hyperOs: Boolean,
+    ): RecoveryStatus? {
+        if (setupComplete()) return null
+        if (availability != ShizukuAvailability.Available) return RecoveryStatus.SETUP_INCOMPLETE
+        return repairMutex.withLock { ensureSetupLocked(hyperOs) }
+    }
+
+    /** Caller holds [repairMutex] (it is not reentrant) — the only place the repair runs. */
+    private suspend fun ensureSetupLocked(hyperOs: Boolean): RecoveryStatus? {
+        if (setupComplete()) return null
+        if (serviceEverEnabled()) {
+            restoreAccessibilityService()
+        }
+        if (!setupComplete() && buttonsHidden()) {
+            restoreButtons(hyperOs)
+        }
+        return if (setupComplete()) null else RecoveryStatus.SETUP_INCOMPLETE
     }
 
     private suspend fun repair(force: Boolean, hyperOs: Boolean): RecoveryStatus {

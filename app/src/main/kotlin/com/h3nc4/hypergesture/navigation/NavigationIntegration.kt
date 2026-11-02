@@ -18,6 +18,8 @@
 
 package com.h3nc4.hypergesture.navigation
 
+import android.content.Context
+
 enum class NavigationMode { GESTURAL, THREE_BUTTON, UNKNOWN }
 
 data class NavigationIntegrationStatus(
@@ -46,4 +48,13 @@ interface NavigationIntegration {
 
     /** Tag the vendor's own launcher starts the assistant with, tried before the app's own. */
     val assistantAttributionTag: String? get() = null
+
+    companion object {
+        fun create(context: Context): NavigationIntegration =
+            if (NavigationModeReader.isHyperOsDevice()) {
+                HyperOSNavigationIntegration(context)
+            } else {
+                GenericAndroidNavigationIntegration(context)
+            }
+    }
 }

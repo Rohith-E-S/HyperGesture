@@ -21,7 +21,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
+import com.h3nc4.hypergesture.navigation.NavigationIntegration
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
@@ -45,7 +45,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
             try {
                 NavigationRecoveryRuntime.runner(appContext).run(RecoveryTrigger.BOOT, force = true)
                 // Read after recovery, or the log describes the state it just repaired.
-                val status = NavigationIntegrationFactory.create(appContext).status()
+                val status = NavigationIntegration.create(appContext).status()
                 if (status.available && status.currentMode != NavigationMode.GESTURAL) {
                     Log.i(
                         TAG,

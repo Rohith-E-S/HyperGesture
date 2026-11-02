@@ -38,7 +38,6 @@ import com.h3nc4.hypergesture.diagnostics.ServiceStatus
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
 import com.h3nc4.hypergesture.gesture.withGestureDefaults
 import com.h3nc4.hypergesture.navigation.NavigationIntegration
-import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRepository
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
@@ -68,7 +67,7 @@ internal class AppModel(
     private val setupState: SetupStateRepository,
     private val scope: CoroutineScope,
 ) {
-    val integration: NavigationIntegration = NavigationIntegrationFactory.create(context)
+    val integration: NavigationIntegration = NavigationIntegration.create(context)
     val navigationRecovery = NavigationRecoveryRepository(context)
     private val recoveryRunner = NavigationRecoveryRuntime.runner(context)
     val snackbar = SnackbarHostState()

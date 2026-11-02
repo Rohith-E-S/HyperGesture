@@ -21,8 +21,6 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import java.io.File
-import java.io.PrintWriter
-import java.io.StringWriter
 
 /**
  * Logcat cannot be trusted on the target ROM: its global `log.tag` threshold drops debug
@@ -43,7 +41,7 @@ object FailureLog {
             appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("---")
-            append(stackTraceOf(throwable))
+            append(throwable.stackTraceToString())
         }
         runCatching {
             file(context).writeText(text.take(MAX_BYTES))
@@ -60,10 +58,4 @@ object FailureLog {
     }
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
-
-    private fun stackTraceOf(throwable: Throwable): String {
-        val writer = StringWriter()
-        PrintWriter(writer).use { throwable.printStackTrace(it) }
-        return writer.toString()
-    }
 }

@@ -23,7 +23,7 @@ import android.util.Log
 import android.widget.Toast
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.gesture.GestureAction
-import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
+import com.h3nc4.hypergesture.navigation.NavigationIntegration
 
 /**
  * MIUI/HyperOS occasionally returns `false` from
@@ -35,7 +35,7 @@ class GestureActionPerformer(private val service: AccessibilityService) {
     private val switcher = AppSwitcher(service)
 
     private val assistantTag: String? by lazy {
-        NavigationIntegrationFactory.create(service).assistantAttributionTag
+        NavigationIntegration.create(service).assistantAttributionTag
     }
 
     /** Called when a bottom-edge touch begins, so the recents list is ready by release. */

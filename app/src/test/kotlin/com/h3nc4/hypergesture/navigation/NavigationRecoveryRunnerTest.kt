@@ -57,12 +57,17 @@ class NavigationRecoveryRunnerTest {
         var fsg: String? = "0",
         var nav: String? = "0",
         var gesture: String? = "1",
+        /** Runs on every probe, so a test can revoke setup mid-run. */
+        var onRead: () -> Unit = {},
     ) : SettingsReader {
-        override fun navigationValues() = mapOf(
-            "force_fsg_nav_bar" to fsg,
-            "navigation_mode" to nav,
-            "use_gesture_version_three" to gesture,
-        )
+        override fun navigationValues(): Map<String, String?> {
+            onRead()
+            return mapOf(
+                "force_fsg_nav_bar" to fsg,
+                "navigation_mode" to nav,
+                "use_gesture_version_three" to gesture,
+            )
+        }
     }
 
     private class FakeShell(
@@ -203,6 +208,22 @@ class NavigationRecoveryRunnerTest {
 
         assertEquals(RecoveryStatus.SETUP_INCOMPLETE, f.runner.run(RecoveryTrigger.PERIODIC))
     }
+
+    /** The re-check inside the mutex: setup can break while the run waits for the lock. */
+    @Test
+    fun `setup lost after the first check still refuses the repair that hides the buttons`() =
+        runBlocking {
+            val f = Fixture(this)
+            f.values(correct = false)
+            f.settings.onRead = { f.setupComplete = false }
+
+            assertEquals(
+                RecoveryStatus.SETUP_INCOMPLETE,
+                f.runner.run(RecoveryTrigger.SETTINGS_OBSERVER),
+            )
+
+            assertTrue(f.shell.commands.isEmpty())
+        }
 
     @Test
     fun `correct values need no process at all`() = runBlocking {
