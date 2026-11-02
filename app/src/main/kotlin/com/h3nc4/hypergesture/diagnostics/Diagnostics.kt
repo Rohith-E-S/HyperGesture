@@ -23,12 +23,13 @@ import android.content.Context
 import android.os.Build
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
-import com.h3nc4.hypergesture.navigation.NavigationIntegrationFactory
+import com.h3nc4.hypergesture.navigation.NavigationIntegration
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationModeReader
 import com.h3nc4.hypergesture.service.AppSwitcher
 import com.h3nc4.hypergesture.service.GestureActionPerformer
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
+import com.h3nc4.hypergesture.update.InstalledVersion
 
 /** Everything here stays on the device: rendered in the UI, never transmitted. */
 data class Diagnostics(
@@ -66,7 +67,7 @@ data class Diagnostics(
 object DiagnosticsCollector {
 
     fun collect(context: Context): Diagnostics {
-        val integration = NavigationIntegrationFactory.create(context)
+        val integration = NavigationIntegration.create(context)
         val status = integration.status()
         return Diagnostics(
             androidRelease = Build.VERSION.RELEASE,
@@ -85,7 +86,7 @@ object DiagnosticsCollector {
             lastAppSwitchFailure = AppSwitcher.lastFailure,
             lastCircleToSearchFailure = GestureActionPerformer.lastCircleToSearchFailure,
             lastRecordedFailure = FailureLog.read(context),
-            appVersionName = appVersionName(context),
+            appVersionName = InstalledVersion.name(context),
         )
     }
 
@@ -112,8 +113,4 @@ object DiagnosticsCollector {
         context.packageName,
         HyperGestureAccessibilityService::class.java.name,
     )
-
-    private fun appVersionName(context: Context): String? = runCatching {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName
-    }.getOrNull()
 }

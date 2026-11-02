@@ -57,6 +57,4 @@ class SetupStateRepository(private val store: DataStore<Preferences>) {
     suspend fun set(flag: SetupFlag, value: Boolean) {
         store.edit { it[flag.key] = value }
     }
-
-    suspend fun setTileAdded(added: Boolean) = set(SetupFlag.TILE_ADDED, added)
 }

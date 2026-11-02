@@ -62,9 +62,9 @@ class SetupStateRepositoryTest {
 
     @Test
     fun `the tile records its own adding and removal`() = runBlocking {
-        repository.setTileAdded(true)
+        repository.set(SetupFlag.TILE_ADDED, true)
         assertEquals(SetupRecord(tileAdded = true), record())
-        repository.setTileAdded(false)
+        repository.set(SetupFlag.TILE_ADDED, false)
         assertEquals(SetupRecord(), record())
     }
 }
