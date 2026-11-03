@@ -18,6 +18,8 @@ HyperOS ties its gesture navigation to the stock launcher. Switch to Nova, Niaga
 
 In landscape the first bottom swipe only shows a pill, and a second one within 2 seconds goes Home, as HyperOS does in games. Every distance and delay is adjustable in the app's Gesture settings.
 
+The **Use gestures** switch at the top of home turns all of it off at once: the edge strips come down and the phone's own navigation buttons come back, and turning it on hands navigation to the gestures again. The buttons are written back through the Shizuku recovery described below, so without Shizuku the status card says the bar is still hidden and offers the navigation settings screen instead. While the switch is off, the recovery keeps its hands off the navigation bar rather than hiding buttons nothing can bring back.
+
 ## Install
 
 1. Install `hypergesture.apk` from [the latest release](https://github.com/Rohith-E-S/HyperGesture/releases/latest).

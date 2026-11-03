@@ -59,7 +59,7 @@ shellcheck -o all scripts/*.sh scripts/hooks/*
 
 ## Screens
 
-Home shows the status and the rows that lead to every other screen, each one level deep under a Material 3 top app bar with a back arrow. Its Features group holds App switching, Circle to Search and Updates, each a split row whose label opens the screen and whose switch turns the feature on or off in place. About holds the version, the links and the credits. The back stack is a list of `Screen` values in `MainActivity`, saved with `rememberSaveable` and popped by `BackHandler`, without a navigation library. Navigation 3 is the upgrade if a screen ever needs a second level or a deep link. `AppModel` holds what the screens show and reads it again on every resume.
+Home opens with the **Use gestures** switch, the master toggle behind `GestureConfiguration.enabled`, then the status and the rows that lead to every other screen, each one level deep under a Material 3 top app bar with a back arrow. Off means `HyperGestureAccessibilityService` installs no strips and `NavigationRecoveryRunner.restoreButtons()` puts the navigation buttons back; until it is on again, that runner records `GESTURES_OFF` instead of running the repair that hides them. Its Features group holds App switching, Circle to Search and Updates, each a split row whose label opens the screen and whose switch turns the feature on or off in place. About holds the version, the links and the credits. The back stack is a list of `Screen` values in `MainActivity`, saved with `rememberSaveable` and popped by `BackHandler`, without a navigation library. Navigation 3 is the upgrade if a screen ever needs a second level or a deep link. `AppModel` holds what the screens show and reads it again on every resume.
 
 ## Testing
 

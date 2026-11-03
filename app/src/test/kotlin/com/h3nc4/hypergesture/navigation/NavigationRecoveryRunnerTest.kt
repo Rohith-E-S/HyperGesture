@@ -97,6 +97,7 @@ class NavigationRecoveryRunnerTest {
         var hyperOs = false
         var setupComplete = true
         var serviceEverEnabled = false
+        var gesturesOn = true
         var now = 1_000L
         val runner = NavigationRecoveryRunner(
             store = store,
@@ -106,6 +107,7 @@ class NavigationRecoveryRunnerTest {
             isHyperOs = { hyperOs },
             setupComplete = { setupComplete },
             serviceEverEnabled = { serviceEverEnabled },
+            gesturesEnabled = { gesturesOn },
             packageName = "com.h3nc4.hypergesture",
             now = { now },
             scope = scope,
@@ -127,6 +129,69 @@ class NavigationRecoveryRunnerTest {
         assertNull(f.runner.run(RecoveryTrigger.MANUAL, force = true))
         assertTrue(f.shell.commands.isEmpty())
         assertTrue(f.store.records.isEmpty())
+    }
+
+    @Test
+    fun `gestures off brings the buttons back instead of hiding them`() = runBlocking {
+        val f = Fixture(this)
+        f.gesturesOn = false
+        f.values(correct = true)
+        f.shell.onExec = { f.values(correct = false) }
+
+        assertEquals(RecoveryStatus.GESTURES_OFF, f.runner.run(RecoveryTrigger.MANUAL, force = true))
+
+        val script = f.shell.commands.single()
+        assertTrue(script.contains("settings put global force_fsg_nav_bar 0"))
+        assertTrue(script.contains("settings put secure navigation_mode 0"))
+        assertFalse("gestures off never runs the repair", script.contains("force_fsg_nav_bar 1"))
+    }
+
+    @Test
+    fun `gestures off leaves buttons that are already up alone`() = runBlocking {
+        val f = Fixture(this)
+        f.gesturesOn = false
+
+        assertEquals(RecoveryStatus.GESTURES_OFF, f.runner.run(RecoveryTrigger.RESUME))
+
+        assertTrue(f.shell.commands.isEmpty())
+        assertEquals(
+            listOf(FakeStore.Record(RecoveryStatus.GESTURES_OFF, RecoveryTrigger.RESUME, 1_000L)),
+            f.store.records,
+        )
+    }
+
+    @Test
+    fun `the switch restores the buttons even with recovery off`() = runBlocking {
+        val f = Fixture(this)
+        f.store.enabled = false
+        f.values(correct = true)
+        f.shell.onExec = { f.values(correct = false) }
+
+        assertTrue(f.runner.restoreButtons())
+
+        val script = f.shell.commands.single()
+        assertTrue(script.contains("settings put global force_fsg_nav_bar 0"))
+        assertTrue(script.contains("settings put secure navigation_mode 0"))
+    }
+
+    @Test
+    fun `the switch reports buttons it has no way to write`() = runBlocking {
+        val f = Fixture(this)
+        f.values(correct = true)
+        f.gateway.availability = ShizukuAvailability.BinderDown
+
+        assertFalse(f.runner.restoreButtons())
+
+        assertTrue(f.shell.commands.isEmpty())
+    }
+
+    @Test
+    fun `the switch needs no shell when the buttons were never hidden`() = runBlocking {
+        val f = Fixture(this)
+
+        assertTrue(f.runner.restoreButtons())
+
+        assertTrue(f.shell.commands.isEmpty())
     }
 
     @Test
