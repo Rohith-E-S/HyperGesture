@@ -246,6 +246,7 @@ class NavigationRecoveryRunnerTest {
         assertTrue(f.shell.commands.any {
             it.contains("settings put secure enabled_accessibility_services") &&
                 it.contains("com.h3nc4.hypergesture") &&
+                it.contains("settings put secure accessibility_enabled 0") &&
                 it.contains("settings put secure accessibility_enabled 1")
         })
     }

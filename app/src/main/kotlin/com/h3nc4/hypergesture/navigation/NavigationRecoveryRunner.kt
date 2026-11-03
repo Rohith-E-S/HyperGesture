@@ -287,15 +287,18 @@ internal object NavigationRecoveryScript {
             curr="$(settings get secure enabled_accessibility_services 2>/dev/null)"
             case ":${'$'}curr:" in
               *":$target:"*|*":$packageName/.service.HyperGestureAccessibilityService:"*)
+                new_curr="${'$'}curr"
                 ;;
               *)
                 if [ -z "${'$'}curr" ] || [ "${'$'}curr" = "null" ]; then
-                  settings put secure enabled_accessibility_services "$target"
+                  new_curr="$target"
                 else
-                  settings put secure enabled_accessibility_services "${'$'}curr:$target"
+                  new_curr="${'$'}curr:$target"
                 fi
                 ;;
             esac
+            settings put secure accessibility_enabled 0
+            settings put secure enabled_accessibility_services "${'$'}new_curr"
             settings put secure accessibility_enabled 1
         """.trimIndent()
     }

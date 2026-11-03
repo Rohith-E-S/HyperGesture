@@ -255,9 +255,16 @@
     <string name="section_known_fixes">Known fixes</string>
     <string name="fix_stopped_title">Gestures stopped after an update</string>
     <string name="fix_stopped_body">Turn the service off and on</string>
+    <string name="fix_restart_overlays_title">Restart gesture overlays</string>
+    <string name="fix_restart_overlays_body">Re-attach the edge strips if gestures stop responding</string>
     <string name="fix_greyed_out_title">Switch greyed out</string>
     <string name="fix_greyed_out_body">Allow restricted settings</string>
     <string name="action_open">Open</string>
+    <string name="action_restart">Restart</string>
+    <string name="warn_overlays_frozen_title">Gesture overlays unresponsive</string>
+    <string name="warn_overlays_frozen_body">The service is running but edge strips are inactive or non-touchable. Restart them now.</string>
+    <string name="snackbar_overlays_restarted">Gesture overlays restarted</string>
+    <string name="snackbar_service_not_running">Accessibility service is not running</string>
     <string name="section_this_device">This device</string>
     <string name="section_last_problems">Last problems</string>
     <string name="action_refresh_diagnostics">Refresh</string>
@@ -268,6 +275,7 @@
     <string name="diag_service_enabled">Service switched on</string>
     <string name="diag_service_bound">Service bound</string>
     <string name="diag_service_running">Service running</string>
+    <string name="diag_overlays_active">Gesture overlays active</string>
     <string name="diag_integration">Navigation integration</string>
     <string name="diag_last_failure">Last failure</string>
     <string name="label_last_app_switch_failure">Last app switch problem</string>

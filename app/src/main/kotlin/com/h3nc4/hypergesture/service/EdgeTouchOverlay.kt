@@ -73,6 +73,13 @@ internal class EdgeTouchOverlay(
 
     private var streamHeld = false
 
+    private val streamWatchdog = Runnable {
+        if (streamHeld) {
+            Log.w(TAG, "Stream held timed out after ${STREAM_WATCHDOG_TIMEOUT_MS}ms, forcing release")
+            releaseStream()
+        }
+    }
+
     // Owned here rather than by a strip, so a pending pill is kept across a reinstall.
     private val confirmation = LandscapeConfirm()
 
@@ -117,6 +124,7 @@ internal class EdgeTouchOverlay(
         bellies.values.forEach(BackBellyOverlay::remove)
         bellies.clear()
         handler.removeCallbacks(pillExpiry)
+        handler.removeCallbacks(streamWatchdog)
         pill?.remove()
         pill = null
         pillVisible = false
@@ -210,8 +218,6 @@ internal class EdgeTouchOverlay(
         bellies.values.forEach(BackBellyOverlay::hide)
         confirmation.onDown(edge, SystemClock.uptimeMillis())
         syncPill()
-        streamHeld = true
-        applyInteractivity()
     }
 
     /** False when the gesture is held back behind the pill instead. */
@@ -229,6 +235,10 @@ internal class EdgeTouchOverlay(
     private fun onUnused(edge: ScreenEdge, samples: List<TouchSample>) {
         confirmation.onReplayed(edge)
         syncPill(immediate = true)
+        streamHeld = true
+        applyInteractivity()
+        handler.removeCallbacks(streamWatchdog)
+        handler.postDelayed(streamWatchdog, STREAM_WATCHDOG_TIMEOUT_MS)
         val dispatched = replayer.replay(samples) { releaseStream() }
         if (!dispatched) releaseStream()
     }
@@ -236,7 +246,7 @@ internal class EdgeTouchOverlay(
     private fun endStream(edge: ScreenEdge) {
         confirmation.onStreamEnd(edge, SystemClock.uptimeMillis())
         syncPill()
-        releaseStream()
+        if (streamHeld) releaseStream()
     }
 
     private fun onPillTimeout() {
@@ -263,10 +273,16 @@ internal class EdgeTouchOverlay(
     }
 
     private fun releaseStream() {
+        handler.removeCallbacks(streamWatchdog)
+        if (!streamHeld) return
         streamHeld = false
         applyInteractivity()
         Log.d(TAG, "stream released; strips interactive again")
     }
+
+    fun isInstalled(): Boolean = strips.isNotEmpty()
+
+    fun isInteractive(): Boolean = !streamHeld && strips.isNotEmpty()
 
     /** See the class comment for why this is alpha 0 as well as non-touchable. */
     private fun applyInteractivity() {
@@ -473,5 +489,7 @@ internal class EdgeTouchOverlay(
 
     private companion object {
         const val TAG = "HyperGesture"
+        /** Above replay settle delay (65ms) + max replay duration (3,000ms) + grace (1,000ms). */
+        const val STREAM_WATCHDOG_TIMEOUT_MS = 5_000L
     }
 }

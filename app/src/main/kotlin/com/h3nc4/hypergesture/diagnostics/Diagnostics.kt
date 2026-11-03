@@ -45,6 +45,8 @@ data class Diagnostics(
     /** The switch in Accessibility, which stays on after HyperOS stops the service. */
     val accessibilityServiceSwitchedOn: Boolean,
     val accessibilityServiceRunning: Boolean,
+    val overlaysInstalled: Boolean,
+    val overlaysInteractive: Boolean,
     val navigationIntegrationId: String,
     val navigationIntegrationAvailable: Boolean,
     val lastGlobalActionFailure: String?,
@@ -80,6 +82,8 @@ object DiagnosticsCollector {
             accessibilityServiceEnabled = isAccessibilityServiceEnabled(context),
             accessibilityServiceSwitchedOn = isAccessibilityServiceSwitchedOn(context),
             accessibilityServiceRunning = HyperGestureAccessibilityService.isRunning(),
+            overlaysInstalled = HyperGestureAccessibilityService.isOverlayInstalled(),
+            overlaysInteractive = HyperGestureAccessibilityService.isOverlayInteractive(),
             navigationIntegrationId = status.integrationId,
             navigationIntegrationAvailable = status.available,
             lastGlobalActionFailure = GestureActionPerformer.lastFailure,
