@@ -228,6 +228,13 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     override fun onInterrupt() = Unit
 
     private fun installOverlay() {
+        // The master switch is off: the strips come down, so an edge swipe is the phone's
+        // own navigation again rather than something this service consumes.
+        if (!configuration.enabled) {
+            overlay?.remove()
+            lastGeometry = null
+            return
+        }
         val geometry = ScreenGeometry.current(this, windowManager)
         lastGeometry = geometry
         overlay?.install(configuration.copy(platform = platformDefaults()), geometry)

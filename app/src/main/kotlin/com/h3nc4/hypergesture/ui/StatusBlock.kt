@@ -43,22 +43,34 @@ import androidx.compose.ui.unit.dp
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.diagnostics.ServiceStatus
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
+import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.ui.theme.success
 import com.h3nc4.hypergesture.ui.theme.warning
 
 /** The answer to why the app was opened, with the one action the current state needs. */
 @Composable
-internal fun StatusBlock(status: ServiceStatus, configuration: GestureConfiguration) {
+internal fun StatusBlock(model: AppModel) {
     val context = LocalContext.current
-    val title = when (status) {
-        ServiceStatus.OFF -> R.string.status_off
-        ServiceStatus.STOPPED -> R.string.status_stopped
-        ServiceStatus.WORKING -> R.string.status_working
+    val status = model.status
+    val configuration = model.configuration
+    // The switch is off while the service is otherwise healthy: the strips are gone by
+    // choice, so there is no accessibility action to offer here.
+    val paused = status == ServiceStatus.WORKING && !configuration.enabled
+    val title = when {
+        paused -> R.string.status_paused
+        else -> when (status) {
+            ServiceStatus.OFF -> R.string.status_off
+            ServiceStatus.STOPPED -> R.string.status_stopped
+            ServiceStatus.WORKING -> R.string.status_working
+        }
     }
-    val body = when (status) {
-        ServiceStatus.OFF -> R.string.status_off_body
-        ServiceStatus.STOPPED -> R.string.status_stopped_body
-        ServiceStatus.WORKING -> workingBody(configuration)
+    val body = when {
+        paused -> R.string.status_paused_body
+        else -> when (status) {
+            ServiceStatus.OFF -> R.string.status_off_body
+            ServiceStatus.STOPPED -> R.string.status_stopped_body
+            ServiceStatus.WORKING -> workingBody(configuration)
+        }
     }
     Card(
         modifier = Modifier
@@ -75,7 +87,10 @@ internal fun StatusBlock(status: ServiceStatus, configuration: GestureConfigurat
                 Box(
                     modifier = Modifier
                         .size(12.dp)
-                        .background(if (status == ServiceStatus.WORKING) success else warning, CircleShape),
+                        .background(
+                            if (status == ServiceStatus.WORKING && !paused) success else warning,
+                            CircleShape,
+                        ),
                 )
                 Text(
                     text = stringResource(title),
@@ -91,6 +106,20 @@ internal fun StatusBlock(status: ServiceStatus, configuration: GestureConfigurat
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // Gestures off and the bar still hidden is the one state with no navigation at
+            // all, so it says so and offers the way back rather than leaving it in a toast.
+            if (paused && model.diagnostics.navigationMode == NavigationMode.GESTURAL) {
+                Text(
+                    text = stringResource(R.string.status_paused_bar_hidden),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (model.integration.isSupported()) {
+                    TextButton(onClick = { model.openNavigationSettings() }) {
+                        Text(stringResource(R.string.action_open_navigation_settings))
+                    }
+                }
+            }
             when (status) {
                 ServiceStatus.OFF -> {
                     Button(onClick = { openAccessibility(context) }) {

@@ -47,6 +47,7 @@ class GestureSettingsRepository(private val context: Context) {
     suspend fun update(transform: (GestureConfiguration) -> GestureConfiguration) {
         val updated = transform(read())
         context.gestureDataStore.edit { preferences ->
+            preferences[ENABLED] = updated.enabled
             preferences[EDGE_WIDTH_DP] = updated.edgeWidthDp
             preferences[SIDE_MIN_DISTANCE_DP] = updated.sideMinimumSwipeDistanceDp
             preferences[BOTTOM_MIN_DISTANCE_DP] = updated.bottomMinimumSwipeDistanceDp
@@ -69,6 +70,7 @@ class GestureSettingsRepository(private val context: Context) {
         val defaults = GestureConfiguration()
         val storedHoldMs = preferences[RECENTS_HOLD_MS] ?: defaults.recentsHoldMs
         return GestureConfiguration(
+            enabled = preferences[ENABLED] ?: defaults.enabled,
             edgeWidthDp = preferences[EDGE_WIDTH_DP] ?: defaults.edgeWidthDp,
             sideMinimumSwipeDistanceDp =
                 preferences[SIDE_MIN_DISTANCE_DP] ?: defaults.sideMinimumSwipeDistanceDp,
@@ -121,6 +123,7 @@ class GestureSettingsRepository(private val context: Context) {
         const val RECENTS_HOLD_OVERRIDE = "hypergesture_recents_hold_ms"
         const val APP_SWITCH_OVERRIDE = "hypergesture_app_switch"
 
+        val ENABLED = booleanPreferencesKey("gestures_enabled")
         val EDGE_WIDTH_DP = floatPreferencesKey("edge_width_dp")
         val SIDE_MIN_DISTANCE_DP = floatPreferencesKey("side_minimum_swipe_distance_dp")
         val BOTTOM_MIN_DISTANCE_DP = floatPreferencesKey("bottom_minimum_swipe_distance_dp")

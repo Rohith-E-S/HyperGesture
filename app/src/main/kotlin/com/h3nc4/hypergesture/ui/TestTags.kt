@@ -21,6 +21,7 @@ package com.h3nc4.hypergesture.ui
 internal object TestTags {
     const val NAV_BACK = "nav_back"
     const val SERVICE_STATUS = "service_status"
+    const val SWITCH_GESTURES_MASTER = "switch_gestures_master"
     const val ROW_SETUP = "row_setup"
     const val ROW_APP_SWITCHING = "row_app_switching"
     const val ROW_CIRCLE_TO_SEARCH = "row_circle_to_search"

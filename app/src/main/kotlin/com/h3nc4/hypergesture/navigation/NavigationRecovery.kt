@@ -56,6 +56,12 @@ enum class RecoveryStatus {
      * the navigation buttons stay. Hiding them while gestures cannot run would strand the user.
      */
     SETUP_INCOMPLETE,
+
+    /**
+     * The app's own switch is off, so the buttons are the navigation there is: the repair
+     * that hides them stays away and any hidden bar is put back.
+     */
+    GESTURES_OFF,
 }
 
 enum class RecoveryTrigger {

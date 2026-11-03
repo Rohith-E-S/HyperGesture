@@ -28,7 +28,16 @@ import com.h3nc4.hypergesture.update.UpdateViewModel
 @Composable
 internal fun HomeScreen(model: AppModel, updates: UpdateViewModel, onOpen: (Screen) -> Unit) {
     val updateState by updates.state.collectAsState()
-    StatusBlock(model.status, model.configuration)
+    // The master switch, first on the screen: it decides whether the rows below describe
+    // gestures that are actually there.
+    ToggleRow(
+        label = stringResource(R.string.gestures_master_label),
+        checked = model.configuration.enabled,
+        supporting = stringResource(R.string.gestures_master_summary),
+        tag = TestTags.SWITCH_GESTURES_MASTER,
+        onChange = model::setGesturesEnabled,
+    )
+    StatusBlock(model)
     SetupGroup(model) { onOpen(Screen.SETUP) }
 
     SectionHeader(stringResource(R.string.section_features))

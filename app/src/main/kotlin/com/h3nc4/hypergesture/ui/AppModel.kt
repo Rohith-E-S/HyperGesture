@@ -57,6 +57,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 
 /** Everything the screens show, read once per resume and kept current by the two flows. */
@@ -119,6 +120,30 @@ internal class AppModel(
 
     fun update(transform: (GestureConfiguration) -> GestureConfiguration) {
         scope.launch { settings.update(transform) }
+    }
+
+    /**
+     * The switch behind every gesture. Off takes the strips down and hands the phone back
+     * its buttons; on lets the repair hide them again while recovery is on.
+     */
+    fun setGesturesEnabled(enabled: Boolean) {
+        scope.launch {
+            settings.update { it.copy(enabled = enabled) }
+            if (enabled) {
+                recoveryRunner.launch(RecoveryTrigger.MANUAL)
+            } else {
+                // Without Shizuku this reports failure only by leaving the bar hidden, which
+                // the status card then says out loud.
+                withContext(Dispatchers.IO) { recoveryRunner.restoreButtons() }
+            }
+            refresh()
+        }
+    }
+
+    /** The way back when gestures are off and the buttons never came up. */
+    fun openNavigationSettings() {
+        integration.requestEnable()
+        refresh()
     }
 
     fun setFlag(flag: SetupFlag, value: Boolean) {

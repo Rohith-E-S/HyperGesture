@@ -50,6 +50,7 @@ internal fun NavigationRecoveryCard(model: AppModel, modifier: Modifier = Modifi
             RecoveryStatus.COMMAND_FAILED -> R.string.recovery_status_command_failed
             RecoveryStatus.NOT_VERIFIED -> R.string.recovery_status_not_verified
             RecoveryStatus.SETUP_INCOMPLETE -> R.string.recovery_status_setup_incomplete
+            RecoveryStatus.GESTURES_OFF -> R.string.recovery_status_gestures_off
         },
     )
     Card(

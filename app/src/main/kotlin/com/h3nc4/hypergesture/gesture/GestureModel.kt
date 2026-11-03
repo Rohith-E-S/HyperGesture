@@ -58,6 +58,11 @@ enum class ScreenEdge { LEFT, RIGHT, BOTTOM }
 data class TouchSample(val xPx: Float, val yPx: Float, val timestampMs: Long)
 
 data class GestureConfiguration(
+    /**
+     * The master switch. Off means no edge strips are installed, so the phone's own
+     * navigation is the only way around again.
+     */
+    val enabled: Boolean = true,
     val edgeWidthDp: Float = 20f,
     val sideMinimumSwipeDistanceDp: Float = 24f,
     /**

@@ -23,6 +23,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import com.h3nc4.hypergesture.diagnostics.DiagnosticsCollector
 import com.h3nc4.hypergesture.diagnostics.FailureLog
+import com.h3nc4.hypergesture.settings.GestureSettingsRepository
 import com.h3nc4.hypergesture.setup.setupState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
@@ -311,6 +312,8 @@ internal class NavigationRecoveryRunner(
     /** Accessibility running, Autostart confirmed and Battery done, read when a repair is needed. */
     private val setupComplete: suspend () -> Boolean,
     private val serviceEverEnabled: suspend () -> Boolean = { false },
+    /** The app's own switch. While it is off the buttons are wanted, not hidden. */
+    private val gesturesEnabled: suspend () -> Boolean = { true },
     private val packageName: String,
     private val now: () -> Long,
     private val scope: CoroutineScope,
@@ -326,6 +329,10 @@ internal class NavigationRecoveryRunner(
     /** Probes first, so a steady state spawns no process at all. */
     suspend fun run(trigger: RecoveryTrigger, force: Boolean = false): RecoveryStatus? {
         if (!store.isEnabled()) return null
+
+        // The app's switch is off, so the buttons are the only navigation there is: they are
+        // put back here, and the repair that would take them away again never runs.
+        if (!gesturesEnabled()) return finishWithButtons(trigger)
 
         // The exemption grants cannot be read back, so until a forced run reports success
         // every trigger retries that path; otherwise enabling while Shizuku was down would
@@ -373,9 +380,32 @@ internal class NavigationRecoveryRunner(
             restoreAccessibilityService()
         }
         if (!setupComplete() && buttonsHidden()) {
-            restoreButtons(hyperOs)
+            executeRestoreButtons(hyperOs)
         }
         return if (setupComplete()) null else RecoveryStatus.SETUP_INCOMPLETE
+    }
+
+    /** The switch turned gestures off, so a bar a repair hid has to come back. */
+    private suspend fun finishWithButtons(trigger: RecoveryTrigger): RecoveryStatus =
+        repairMutex.withLock {
+            restoreButtonsLocked()
+            finish(RecoveryStatus.GESTURES_OFF, trigger)
+        }
+
+    /**
+     * The one the switch calls directly, because a user who turned recovery off keeps a
+     * hidden bar with no repair left to ask for it.
+     *
+     * True when the buttons are usable: they were never hidden, or this restored them.
+     */
+    suspend fun restoreButtons(): Boolean = repairMutex.withLock { restoreButtonsLocked() }
+
+    /** Caller holds [repairMutex]. False only when the bar stays hidden with no way to write it. */
+    private suspend fun restoreButtonsLocked(): Boolean {
+        if (!buttonsHidden()) return true
+        if (gateway.availability() != ShizukuAvailability.Available) return false
+        executeRestoreButtons(isHyperOs())
+        return !buttonsHidden()
     }
 
     private suspend fun repair(force: Boolean, hyperOs: Boolean): RecoveryStatus {
@@ -413,7 +443,7 @@ internal class NavigationRecoveryRunner(
             includeHyperOs = hyperOs,
         )
 
-    private suspend fun restoreButtons(hyperOs: Boolean) {
+    private suspend fun executeRestoreButtons(hyperOs: Boolean) {
         val script = NavigationRecoveryScript.buildRestoreButtons(hyperOs)
         try {
             shell.exec(script, SHELL_TIMEOUT_SECONDS)
@@ -474,6 +504,7 @@ internal object NavigationRecoveryRuntime {
         val failures = CoroutineExceptionHandler { _, throwable ->
             FailureLog.record(context, "navigation recovery", throwable)
         }
+        val gestureSettings = GestureSettingsRepository(context)
         return NavigationRecoveryRunner(
             store = NavigationRecoveryRepository(context),
             settings = ContentResolverSettingsReader(context),
@@ -484,6 +515,7 @@ internal object NavigationRecoveryRuntime {
             serviceEverEnabled = {
                 runCatching { context.setupState.record.first().serviceEverEnabled }.getOrDefault(false)
             },
+            gesturesEnabled = { gestureSettings.read().enabled },
             packageName = context.packageName,
             now = System::currentTimeMillis,
             scope = CoroutineScope(SupervisorJob() + Dispatchers.IO + failures),
