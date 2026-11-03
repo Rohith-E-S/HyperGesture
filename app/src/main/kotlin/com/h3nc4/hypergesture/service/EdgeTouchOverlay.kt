@@ -489,6 +489,7 @@ internal class EdgeTouchOverlay(
 
     private companion object {
         const val TAG = "HyperGesture"
-        const val STREAM_WATCHDOG_TIMEOUT_MS = 3_000L
+        /** Above replay settle delay (65ms) + max replay duration (3,000ms) + grace (1,000ms). */
+        const val STREAM_WATCHDOG_TIMEOUT_MS = 5_000L
     }
 }

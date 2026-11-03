@@ -75,7 +75,7 @@ internal fun TroubleshootingScreen(model: AppModel) {
     DeviceRows(diagnostics, model.recoveryState)
 
     SectionHeader(stringResource(R.string.section_last_problems))
-    if (diagnostics.accessibilityServiceRunning && !diagnostics.overlaysInteractive) {
+    if (model.configuration.enabled && diagnostics.accessibilityServiceRunning && !diagnostics.overlaysInteractive) {
         InfoRow(
             title = stringResource(R.string.warn_overlays_frozen_title),
             supporting = stringResource(R.string.warn_overlays_frozen_body),
