@@ -44,6 +44,15 @@ internal fun TroubleshootingScreen(model: AppModel) {
     val diagnostics = model.diagnostics
     SectionHeader(stringResource(R.string.section_known_fixes))
     InfoRow(
+        title = stringResource(R.string.fix_restart_overlays_title),
+        supporting = stringResource(R.string.fix_restart_overlays_body),
+        actions = {
+            OutlinedButton(onClick = model::reinstallOverlays) {
+                Text(stringResource(R.string.action_restart))
+            }
+        },
+    )
+    InfoRow(
         title = stringResource(R.string.fix_stopped_title),
         supporting = stringResource(R.string.fix_stopped_body),
         actions = {
@@ -66,6 +75,17 @@ internal fun TroubleshootingScreen(model: AppModel) {
     DeviceRows(diagnostics, model.recoveryState)
 
     SectionHeader(stringResource(R.string.section_last_problems))
+    if (diagnostics.accessibilityServiceRunning && !diagnostics.overlaysInteractive) {
+        InfoRow(
+            title = stringResource(R.string.warn_overlays_frozen_title),
+            supporting = stringResource(R.string.warn_overlays_frozen_body),
+            actions = {
+                OutlinedButton(onClick = model::reinstallOverlays) {
+                    Text(stringResource(R.string.action_restart))
+                }
+            },
+        )
+    }
     val none = stringResource(R.string.diag_none)
     ValueRow(stringResource(R.string.diag_last_failure), diagnostics.lastGlobalActionFailure ?: none)
     ValueRow(stringResource(R.string.label_last_app_switch_failure), diagnostics.lastAppSwitchFailure ?: none)
@@ -112,6 +132,7 @@ private fun DeviceRows(diagnostics: Diagnostics, recoveryState: RecoveryState) {
     ValueRow(stringResource(R.string.diag_service_enabled), yesNo(diagnostics.accessibilityServiceSwitchedOn))
     ValueRow(stringResource(R.string.diag_service_bound), yesNo(diagnostics.accessibilityServiceEnabled))
     ValueRow(stringResource(R.string.diag_service_running), yesNo(diagnostics.accessibilityServiceRunning))
+    ValueRow(stringResource(R.string.diag_overlays_active), yesNo(diagnostics.overlaysInteractive))
     ValueRow(stringResource(R.string.diag_integration), integrationLabel(diagnostics.navigationIntegrationId))
     if (diagnostics.navigationIntegrationAvailable) {
         val recoveryLabel = stringResource(

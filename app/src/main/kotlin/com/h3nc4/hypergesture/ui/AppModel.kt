@@ -118,6 +118,20 @@ internal class AppModel(
         }
     }
 
+    fun reinstallOverlays() {
+        val ok = HyperGestureAccessibilityService.reinstallOverlays()
+        refresh()
+        scope.launch {
+            snackbar.showSnackbar(
+                if (ok) {
+                    context.getString(com.h3nc4.hypergesture.R.string.snackbar_overlays_restarted)
+                } else {
+                    context.getString(com.h3nc4.hypergesture.R.string.snackbar_service_not_running)
+                },
+            )
+        }
+    }
+
     fun update(transform: (GestureConfiguration) -> GestureConfiguration) {
         scope.launch { settings.update(transform) }
     }

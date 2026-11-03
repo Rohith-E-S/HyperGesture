@@ -329,7 +329,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             return false
         }
 
-        val settleDelayMs = (WINDOW_SETTLE_MS - rawDurationMs).coerceAtLeast(0L)
+        val settleDelayMs = WINDOW_SETTLE_MS
         var finished = false
         val finish = Runnable {
             if (!finished) {
@@ -404,6 +404,16 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         private var instance: HyperGestureAccessibilityService? = null
 
         fun isRunning(): Boolean = instance != null
+
+        fun isOverlayInstalled(): Boolean = instance?.overlay?.isInstalled() ?: false
+
+        fun isOverlayInteractive(): Boolean = instance?.overlay?.isInteractive() ?: false
+
+        fun reinstallOverlays(): Boolean {
+            val service = instance ?: return false
+            service.handler.post { service.installOverlay() }
+            return true
+        }
 
         private val runningState = MutableStateFlow(false)
 

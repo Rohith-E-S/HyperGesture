@@ -140,7 +140,13 @@ internal fun StatusBlock(model: AppModel) {
                 ServiceStatus.STOPPED -> Button(onClick = { openAccessibility(context) }) {
                     Text(stringResource(R.string.action_fix))
                 }
-                ServiceStatus.WORKING -> Unit
+                ServiceStatus.WORKING -> {
+                    if (configuration.enabled && !model.diagnostics.overlaysInteractive) {
+                        Button(onClick = model::reinstallOverlays) {
+                            Text(stringResource(R.string.action_restart))
+                        }
+                    }
+                }
             }
         }
     }
