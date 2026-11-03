@@ -180,6 +180,9 @@ open_test_app() {
       grep -qE "mCurrentFocus.*${PKG}"; then
       break
     fi
+    if [ "${focus_try}" -ge 2 ]; then
+      "${ADB_BIN}" shell am start -n "${PKG}/.ui.MainActivity" >/dev/null 2>&1 || true
+    fi
     sleep 1
     focus_try=$((focus_try + 1))
   done
