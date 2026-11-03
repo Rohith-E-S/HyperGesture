@@ -92,5 +92,6 @@ sleep 2
 assert_no_log "an edge tap is not misread as a gesture" "GESTURE_FIRED"
 assert_log "an edge tap is replayed to the app underneath" "REPLAY_DISPATCHED"
 assert_no_log "the replay was not refused" "REPLAY_REFUSED"
+wait_for_stream_release
 
 report "NAVIGATION"

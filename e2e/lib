@@ -148,6 +148,20 @@ assert_no_log() {
   fi
 }
 
+# Waits until an ongoing touch replay finishes and edge strips become interactive again.
+wait_for_stream_release() {
+  wait_try=1
+  while [ "${wait_try}" -le 25 ]; do
+    if log_has "stream released"; then
+      sleep 0.2
+      return 0
+    fi
+    sleep 0.2
+    wait_try=$((wait_try + 1))
+  done
+  return 0
+}
+
 resumed_activity() {
   "${ADB_BIN}" shell dumpsys activity activities 2>/dev/null |
     tr -d '\r' | grep -oE 'topResumedActivity.*' | head -1 || true
