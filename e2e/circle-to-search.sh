@@ -107,6 +107,7 @@ reset_log
 sleep 2
 assert_no_log "a short hold under a 1500 ms delay does not fire" "GESTURE_FIRED BOTTOM CircleToSearch"
 assert_log "it is replayed to the app underneath" "REPLAY_DISPATCHED"
+wait_for_stream_release
 
 echo >&2
 echo "== a long press beside the handle goes to the app ==" >&2
@@ -116,6 +117,7 @@ hold_still $((WIDTH / 5)) 0.5
 sleep 2
 assert_no_log "a hold beside the handle does not fire" "GESTURE_FIRED BOTTOM CircleToSearch"
 assert_log "it is replayed to the app underneath" "REPLAY_DISPATCHED"
+wait_for_stream_release
 
 echo >&2
 echo "== an upward swipe from the handle is still Home ==" >&2
