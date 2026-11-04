@@ -32,11 +32,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.IOException
 
 private const val TAG = "HyperGesture"
 
@@ -112,20 +109,7 @@ private val Context.updateDataStore: DataStore<Preferences> by
         corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
     )
 
-internal fun updateStore(context: Context): UpdateStore {
-    val delegate = context.updateDataStore
-    // An unreadable file reads as empty, so a corrupt update store means off with nothing cached.
-    val resilient = object : DataStore<Preferences> {
-        override val data: Flow<Preferences> = delegate.data.catch { e ->
-            if (e is IOException) emit(emptyPreferences()) else throw e
-        }
-
-        override suspend fun updateData(
-            transform: suspend (t: Preferences) -> Preferences,
-        ): Preferences = delegate.updateData(transform)
-    }
-    return DataStoreUpdateStore(resilient)
-}
+internal fun updateStore(context: Context): UpdateStore = DataStoreUpdateStore(context.updateDataStore)
 
 internal object InstalledVersion {
     private const val OVERRIDE = "hypergesture_version_name"
