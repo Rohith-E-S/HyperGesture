@@ -18,8 +18,10 @@
 package com.h3nc4.hypergesture.navigation
 
 import android.content.Context
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -27,11 +29,16 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 
-private val Context.navigationRecoveryStore by preferencesDataStore("navigation_recovery")
+private val Context.navigationRecoveryStore by preferencesDataStore(
+    "navigation_recovery",
+    corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+)
 
 /** Not on Android 8+'s manifest-receiver whitelist, so it is registered at runtime. */
 internal const val ACTION_PREFERRED_ACTIVITY_CHANGED = "android.intent.action.ACTION_PREFERRED_ACTIVITY_CHANGED"
@@ -98,14 +105,16 @@ internal interface RecoveryStore {
 
 internal class NavigationRecoveryRepository(private val context: Context) : RecoveryStore {
 
-    val state: Flow<RecoveryState> = context.navigationRecoveryStore.data.map { preferences ->
-        RecoveryState(
-            enabled = preferences[ENABLED] ?: false,
-            status = decodeRecoveryStatus(preferences[STATUS]),
-            lastAttemptAt = preferences[LAST_ATTEMPT_AT],
-            lastTrigger = decodeRecoveryTrigger(preferences[LAST_TRIGGER]),
-        )
-    }
+    val state: Flow<RecoveryState> = context.navigationRecoveryStore.data
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { preferences ->
+            RecoveryState(
+                enabled = preferences[ENABLED] ?: false,
+                status = decodeRecoveryStatus(preferences[STATUS]),
+                lastAttemptAt = preferences[LAST_ATTEMPT_AT],
+                lastTrigger = decodeRecoveryTrigger(preferences[LAST_TRIGGER]),
+            )
+        }
 
     override suspend fun isEnabled(): Boolean = state.first().enabled
 
@@ -130,7 +139,9 @@ internal class NavigationRecoveryRepository(private val context: Context) : Reco
     }
 
     override suspend fun exemptionsGranted(): Boolean =
-        context.navigationRecoveryStore.data.first()[EXEMPTIONS_GRANTED] ?: false
+        context.navigationRecoveryStore.data
+            .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+            .first()[EXEMPTIONS_GRANTED] ?: false
 
     override suspend fun markExemptionsGranted(granted: Boolean) {
         context.navigationRecoveryStore.edit { it[EXEMPTIONS_GRANTED] = granted }
