@@ -558,18 +558,15 @@ internal object NavigationRecoveryRuntime {
 /**
  * The single implementation behind every master gestures toggle: persists the new state,
  * triggers the recovery runner to hide buttons if turning on, or restores them if turning off.
- *
- * Returns false only when turning gestures off left the bar hidden with no way to write it,
- * so callers can tell the buttons did not come back.
  */
-internal suspend fun applyGesturesEnabled(context: Context, enabled: Boolean): Boolean {
+internal suspend fun applyGesturesEnabled(context: Context, enabled: Boolean) {
     GestureSettingsRepository(context).update { it.copy(enabled = enabled) }
     val runner = NavigationRecoveryRuntime.runner(context)
     if (enabled) {
         runner.launch(RecoveryTrigger.MANUAL)
-        return true
+    } else {
+        // Without Shizuku this reports failure only by leaving the bar hidden, which
+        // the status card then says out loud.
+        withContext(Dispatchers.IO) { runner.restoreButtons() }
     }
-    // Without Shizuku this reports failure only by leaving the bar hidden, which
-    // the status card then says out loud.
-    return withContext(Dispatchers.IO) { runner.restoreButtons() }
 }
