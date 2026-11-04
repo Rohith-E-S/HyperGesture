@@ -23,7 +23,7 @@ import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import com.h3nc4.hypergesture.R
 
-internal enum class TileTarget { TOGGLE, ACCESSIBILITY_SETTINGS, APP }
+internal enum class TileTarget { TOGGLE, ACCESSIBILITY_SETTINGS }
 
 /** What the tile shows and where a tap leads, kept apart from TileService so it is testable. */
 internal data class TileFace(

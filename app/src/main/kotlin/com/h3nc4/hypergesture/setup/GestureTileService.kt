@@ -29,11 +29,9 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.diagnostics.DiagnosticsCollector
-import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
-import com.h3nc4.hypergesture.navigation.RecoveryTrigger
+import com.h3nc4.hypergesture.navigation.applyGesturesEnabled
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
-import com.h3nc4.hypergesture.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -93,34 +91,15 @@ class GestureTileService : TileService() {
                 val target = accessibilityIntent(this)
                 if (isLocked) unlockAndRun { open(target) } else open(target)
             }
-            TileTarget.APP -> {
-                val target = Intent(this, MainActivity::class.java)
-                if (isLocked) unlockAndRun { open(target) } else open(target)
-            }
         }
     }
 
     private fun toggleGestures() {
-        val tile = qsTile
-        if (tile != null) {
-            val nextActive = tile.state != Tile.STATE_ACTIVE
-            tile.state = if (nextActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-            tile.subtitle = getString(if (nextActive) R.string.status_active else R.string.status_inactive)
-            tile.updateTile()
-        }
         writes.launch {
             toggleMutex.withLock {
-                val settings = GestureSettingsRepository(applicationContext)
-                val current = settings.read().enabled
-                val newEnabled = !current
-                lastKnownGesturesEnabled = newEnabled
-                settings.update { it.copy(enabled = newEnabled) }
-                val recoveryRunner = NavigationRecoveryRuntime.runner(applicationContext)
-                if (newEnabled) {
-                    recoveryRunner.launch(RecoveryTrigger.MANUAL)
-                } else {
-                    withContext(Dispatchers.IO) { recoveryRunner.restoreButtons() }
-                }
+                val next = !GestureSettingsRepository(applicationContext).read().enabled
+                applyGesturesEnabled(applicationContext, next)
+                lastKnownGesturesEnabled = next
                 withContext(Dispatchers.Main) {
                     refresh()
                 }

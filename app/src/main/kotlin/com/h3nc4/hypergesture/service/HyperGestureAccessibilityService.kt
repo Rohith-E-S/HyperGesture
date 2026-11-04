@@ -164,7 +164,6 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             settings.configuration.collect { updated ->
                 configuration = updated
                 installOverlay()
-                GestureTileService.requestRefresh(this@HyperGestureAccessibilityService, updated.enabled)
             }
         }
     }

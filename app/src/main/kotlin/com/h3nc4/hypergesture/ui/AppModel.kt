@@ -42,6 +42,7 @@ import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRepository
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryState
+import com.h3nc4.hypergesture.navigation.applyGesturesEnabled
 import com.h3nc4.hypergesture.setup.AccessibilityAlert
 import com.h3nc4.hypergesture.setup.GestureTileService
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
@@ -143,14 +144,7 @@ internal class AppModel(
      */
     fun setGesturesEnabled(enabled: Boolean) {
         scope.launch {
-            settings.update { it.copy(enabled = enabled) }
-            if (enabled) {
-                recoveryRunner.launch(RecoveryTrigger.MANUAL)
-            } else {
-                // Without Shizuku this reports failure only by leaving the bar hidden, which
-                // the status card then says out loud.
-                withContext(Dispatchers.IO) { recoveryRunner.restoreButtons() }
-            }
+            applyGesturesEnabled(context, enabled)
             refresh()
             GestureTileService.requestRefresh(context, enabled)
         }

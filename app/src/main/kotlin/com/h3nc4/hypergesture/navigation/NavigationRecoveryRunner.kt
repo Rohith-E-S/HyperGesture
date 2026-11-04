@@ -37,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 import java.io.InputStream
 import java.lang.reflect.Method
@@ -543,5 +544,21 @@ internal object NavigationRecoveryRuntime {
         val batteryDone = batteryUnrestricted || record.batteryConfirmed
         val autostartDone = !NavigationModeReader.isHyperOsDevice() || record.autostartConfirmed
         return accessibilityDone && batteryDone && autostartDone
+    }
+}
+
+/**
+ * The single implementation behind every master gestures toggle: persists the new state,
+ * triggers the recovery runner to hide buttons if turning on, or restores them if turning off.
+ */
+internal suspend fun applyGesturesEnabled(context: Context, enabled: Boolean) {
+    GestureSettingsRepository(context).update { it.copy(enabled = enabled) }
+    val runner = NavigationRecoveryRuntime.runner(context)
+    if (enabled) {
+        runner.launch(RecoveryTrigger.MANUAL)
+    } else {
+        // Without Shizuku this reports failure only by leaving the bar hidden, which
+        // the status card then says out loud.
+        withContext(Dispatchers.IO) { runner.restoreButtons() }
     }
 }
