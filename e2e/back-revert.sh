@@ -53,11 +53,21 @@ assert_stayed() {
 
 # assert_left <description> - Back took the test app off the screen.
 assert_left() {
-  resumed="$(resumed_activity)"
-  case "${resumed}" in
-    *"${PKG}"*) fail "$1 (still on ${resumed})" ;;
-    *) pass "$1" ;;
-  esac
+  left_try=1
+  while [ "${left_try}" -le 5 ]; do
+    resumed="$(resumed_activity)"
+    case "${resumed}" in
+      *"${PKG}"*)
+        sleep 1
+        left_try=$((left_try + 1))
+        ;;
+      *)
+        pass "$1"
+        return 0
+        ;;
+    esac
+  done
+  fail "$1 (still on ${resumed})"
 }
 
 echo >&2

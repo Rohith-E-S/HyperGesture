@@ -27,16 +27,32 @@ import org.junit.Test
 class TileModelTest {
 
     @Test
-    fun `running service shows an active tile that opens the app`() {
-        val face = TileFace.of(serviceEnabled = true)
+    fun `running service with gestures enabled shows an active tile that toggles gestures`() {
+        val face = TileFace.of(serviceEnabled = true, gesturesEnabled = true)
         assertTrue(face.active)
         assertEquals(R.string.status_active, face.subtitle)
-        assertEquals(TileTarget.APP, face.target)
+        assertEquals(TileTarget.TOGGLE, face.target)
+    }
+
+    @Test
+    fun `running service with gestures disabled shows an inactive tile that toggles gestures`() {
+        val face = TileFace.of(serviceEnabled = true, gesturesEnabled = false)
+        assertFalse(face.active)
+        assertEquals(R.string.status_inactive, face.subtitle)
+        assertEquals(TileTarget.TOGGLE, face.target)
     }
 
     @Test
     fun `stopped service shows an inactive tile that opens accessibility settings`() {
-        val face = TileFace.of(serviceEnabled = false)
+        val face = TileFace.of(serviceEnabled = false, gesturesEnabled = true)
+        assertFalse(face.active)
+        assertEquals(R.string.status_inactive, face.subtitle)
+        assertEquals(TileTarget.ACCESSIBILITY_SETTINGS, face.target)
+    }
+
+    @Test
+    fun `stopped service with gestures disabled still opens accessibility settings`() {
+        val face = TileFace.of(serviceEnabled = false, gesturesEnabled = false)
         assertFalse(face.active)
         assertEquals(R.string.status_inactive, face.subtitle)
         assertEquals(TileTarget.ACCESSIBILITY_SETTINGS, face.target)
