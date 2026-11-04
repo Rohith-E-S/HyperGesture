@@ -18,6 +18,7 @@
 package com.h3nc4.hypergesture.update
 
 import android.content.pm.PackageInstaller
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -94,7 +95,7 @@ internal interface ApkInstaller {
     fun canInstall(): Boolean
 
     /** Hands the file to the system, which answers later through [UpdateController.onInstallOutcome]. */
-    fun install(file: File): String?
+    suspend fun install(file: File): String?
 }
 
 internal interface UpdateStore {
@@ -180,24 +181,33 @@ internal class UpdateController(
 
     private suspend fun check() {
         update { it.copy(phase = UpdatePhase.Checking) }
-        val now = clock()
-        val fetched = source.latest()
-        store.recordAttempt(now, (fetched as? FetchResult.Ok)?.body)
-        update { it.copy(lastCheckedMs = now) }
-        when (fetched) {
-            is FetchResult.Ok -> {
-                val release = try {
-                    ReleaseParser.parse(fetched.body)
-                } catch (e: ReleaseParser.MalformedRelease) {
-                    fail(CheckFailure.BadResponse(e.message))
-                    return
+        try {
+            val now = clock()
+            val fetched = source.latest()
+            store.recordAttempt(now, (fetched as? FetchResult.Ok)?.body)
+            update { it.copy(lastCheckedMs = now) }
+            when (fetched) {
+                is FetchResult.Ok -> {
+                    val release = try {
+                        ReleaseParser.parse(fetched.body)
+                    } catch (e: ReleaseParser.MalformedRelease) {
+                        fail(CheckFailure.BadResponse(e.message))
+                        return
+                    }
+                    show(CheckResult.decide(installedVersion(), release))
                 }
-                show(CheckResult.decide(installedVersion(), release))
+                FetchResult.NotFound -> show(CheckResult.NothingPublished)
+                is FetchResult.RateLimited -> fail(CheckFailure.RateLimited(fetched.resetEpochSeconds))
+                is FetchResult.HttpError -> fail(CheckFailure.Http(fetched.code))
+                is FetchResult.NoNetwork -> fail(CheckFailure.NoNetwork(fetched.reason))
             }
-            FetchResult.NotFound -> show(CheckResult.NothingPublished)
-            is FetchResult.RateLimited -> fail(CheckFailure.RateLimited(fetched.resetEpochSeconds))
-            is FetchResult.HttpError -> fail(CheckFailure.Http(fetched.code))
-            is FetchResult.NoNetwork -> fail(CheckFailure.NoNetwork(fetched.reason))
+        } catch (e: CancellationException) {
+            if (mutableState.value.phase == UpdatePhase.Checking) {
+                update { it.copy(phase = UpdatePhase.Idle) }
+            }
+            throw e
+        } catch (e: Exception) {
+            fail(CheckFailure.BadResponse(e.reason()))
         }
     }
 
@@ -218,21 +228,37 @@ internal class UpdateController(
         // Switching off clears the offer, so an offer implies the switch is on.
         val offer = current.offer ?: return
         if (current.busy) return
-        if (!installer.canInstall()) {
-            update { it.copy(phase = UpdatePhase.PermissionNeeded) }
-            return
-        }
-        update { it.copy(phase = UpdatePhase.Downloading(null)) }
-        val downloaded = downloader.download(offer.asset) { percent ->
-            update { it.copy(phase = UpdatePhase.Downloading(percent)) }
-        }
-        if (downloaded !is DownloadResult.Ok) {
-            update { it.copy(phase = UpdatePhase.DownloadFailed(downloaded)) }
-            return
-        }
-        val refusal = installer.install(downloaded.file)
-        update {
-            it.copy(phase = refusal?.let(UpdatePhase::InstallNotStarted) ?: UpdatePhase.Confirming)
+        try {
+            if (!installer.canInstall()) {
+                update { it.copy(phase = UpdatePhase.PermissionNeeded) }
+                return
+            }
+            update { it.copy(phase = UpdatePhase.Downloading(null)) }
+            val downloaded = downloader.download(offer.asset) { percent ->
+                update { it.copy(phase = UpdatePhase.Downloading(percent)) }
+            }
+            if (downloaded !is DownloadResult.Ok) {
+                update { it.copy(phase = UpdatePhase.DownloadFailed(downloaded)) }
+                return
+            }
+            // No published checksum means nothing proved the file is the release, so never install it.
+            if (!downloaded.verified) {
+                val unverified = DownloadResult.Failed("unverified: no checksum published for this release")
+                update { it.copy(phase = UpdatePhase.DownloadFailed(unverified)) }
+                return
+            }
+            val refusal = installer.install(downloaded.file)
+            update {
+                it.copy(phase = refusal?.let(UpdatePhase::InstallNotStarted) ?: UpdatePhase.Confirming)
+            }
+        } catch (e: CancellationException) {
+            if (mutableState.value.phase is UpdatePhase.Downloading) {
+                update { it.copy(phase = UpdatePhase.Idle) }
+            }
+            throw e
+        } catch (e: Exception) {
+            val failed = DownloadResult.Failed(e.reason())
+            update { it.copy(phase = UpdatePhase.DownloadFailed(failed)) }
         }
     }
 

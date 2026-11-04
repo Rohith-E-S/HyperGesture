@@ -27,9 +27,16 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 private const val TAG = "HyperGesture"
 
@@ -38,30 +45,39 @@ internal class SessionApkInstaller(private val context: Context) : ApkInstaller 
 
     override fun canInstall(): Boolean = context.packageManager.canRequestPackageInstalls()
 
-    override fun install(file: File): String? = runCatching {
-        val installer = context.packageManager.packageInstaller
-        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-        params.setAppPackageName(context.packageName)
-        params.setSize(file.length())
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
-        }
-        val sessionId = installer.createSession(params)
-        installer.openSession(sessionId).use { session ->
-            session.openWrite(ReleaseParser.APK_NAME, 0, file.length()).use { output ->
-                file.inputStream().use { it.copyTo(output) }
-                session.fsync(output)
+    // Copying and fsyncing an APK blocks, so this runs on IO rather than the main thread.
+    override suspend fun install(file: File): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val installer = context.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            params.setAppPackageName(context.packageName)
+            params.setSize(file.length())
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
             }
-            // Mutable, since the installer writes its status into the extras.
-            val callback = PendingIntent.getBroadcast(
-                context,
-                sessionId,
-                Intent(context, InstallResultReceiver::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-            )
-            session.commit(callback.intentSender)
-        }
-    }.exceptionOrNull()?.reason()
+            val sessionId = installer.createSession(params)
+            val opened = installer.openSession(sessionId)
+            try {
+                opened.openWrite(ReleaseParser.APK_NAME, 0, file.length()).use { output ->
+                    file.inputStream().use { it.copyTo(output) }
+                    opened.fsync(output)
+                }
+                // Mutable, since the installer writes its status into the extras.
+                val callback = PendingIntent.getBroadcast(
+                    context,
+                    sessionId,
+                    Intent(context, InstallResultReceiver::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+                )
+                opened.commit(callback.intentSender)
+            } catch (e: Exception) {
+                runCatching { opened.abandon() }
+                throw e
+            } finally {
+                runCatching { opened.close() }
+            }
+        }.exceptionOrNull()?.reason()
+    }
 }
 
 class InstallResultReceiver : BroadcastReceiver() {
@@ -91,9 +107,25 @@ class InstallResultReceiver : BroadcastReceiver() {
 }
 
 private val Context.updateDataStore: DataStore<Preferences> by
-    preferencesDataStore(name = "update_check")
+    preferencesDataStore(
+        name = "update_check",
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+    )
 
-internal fun updateStore(context: Context): UpdateStore = DataStoreUpdateStore(context.updateDataStore)
+internal fun updateStore(context: Context): UpdateStore {
+    val delegate = context.updateDataStore
+    // An unreadable file reads as empty, so a corrupt update store means off with nothing cached.
+    val resilient = object : DataStore<Preferences> {
+        override val data: Flow<Preferences> = delegate.data.catch { e ->
+            if (e is IOException) emit(emptyPreferences()) else throw e
+        }
+
+        override suspend fun updateData(
+            transform: suspend (t: Preferences) -> Preferences,
+        ): Preferences = delegate.updateData(transform)
+    }
+    return DataStoreUpdateStore(resilient)
+}
 
 internal object InstalledVersion {
     private const val OVERRIDE = "hypergesture_version_name"

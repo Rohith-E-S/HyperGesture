@@ -20,6 +20,7 @@ package com.h3nc4.hypergesture.update
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -35,6 +36,9 @@ private const val TAG = "HyperGesture"
 private const val TIMEOUT_MS = 15_000
 private const val MAX_REDIRECTS = 5
 private const val BUFFER_BYTES = 64 * 1024
+
+/** A release answer is a few kilobytes; anything past this is not one. */
+private const val MAX_RELEASE_BYTES = 2 * 1024 * 1024
 
 internal const val LATEST_RELEASE_URL =
     "https://api.github.com/repos/Rohith-E-S/HyperGesture/releases/latest"
@@ -105,13 +109,28 @@ internal class GitHubReleaseSource(private val transport: HttpTransport) : Relea
                     code = it.code,
                     remaining = it.header("x-ratelimit-remaining"),
                     reset = it.header("x-ratelimit-reset"),
-                ) { it.body().use { body -> body.readBytes().decodeToString() } }
+                ) { it.body().use { body -> body.readCapped() } }
             }
         } catch (e: IOException) {
             Log.i(TAG, "update check failed: ${e.javaClass.simpleName}")
             FetchResult.NoNetwork(e.reason())
         }
     }
+}
+
+/** Reads at most [MAX_RELEASE_BYTES], so a huge answer cannot exhaust memory. */
+private fun InputStream.readCapped(): String {
+    val buffer = ByteArray(BUFFER_BYTES)
+    val out = ByteArrayOutputStream()
+    var total = 0
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > MAX_RELEASE_BYTES) throw IOException("release response too large")
+        out.write(buffer, 0, read)
+    }
+    return out.toByteArray().decodeToString()
 }
 
 /** Reports a change of whole percent, or null throughout when the size is unknown. */
