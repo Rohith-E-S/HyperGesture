@@ -27,6 +27,14 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import com.h3nc4.hypergesture.diagnostics.FailureLog
+import com.h3nc4.hypergesture.settings.GestureSettingsRepository
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Walks the apps the user came from, which Android exposes to nobody: there is no global
@@ -44,14 +52,59 @@ import com.h3nc4.hypergesture.diagnostics.FailureLog
  */
 internal class AppSwitcher(
     private val context: Context,
-    private val recents: RecentTasksSource = RecentTasksSource(),
+    private val recents: RecentTasksSource? = null,
+    private val isAppSwitchEnabled: (() -> Boolean)? = null,
 ) {
+
+    // Latest app-switch setting, read without blocking the caller. Seeded off, matching
+    // the GestureConfiguration default, until the settings flow first emits.
+    @Volatile
+    private var appSwitchEnabled = false
+
+    private val enabled: () -> Boolean = isAppSwitchEnabled
+        ?: if (recents != null) {
+            { true }
+        } else {
+            { appSwitchEnabled }
+        }
+
+    // IO scope for config reads, step and buildWalk. Cancelled by close(); recents runs
+    // as a child of it, so close() cancels both.
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, throwable ->
+            Log.w(TAG, "app switch: background work failed", throwable)
+        },
+    )
+
+    private val tasks: RecentTasksSource = recents
+        ?: RecentTasksSource(parentScope = scope, isAppSwitchEnabled = enabled)
+
+    init {
+        if (isAppSwitchEnabled == null && recents == null) {
+            scope.launch {
+                runCatching {
+                    GestureSettingsRepository(context.applicationContext)
+                        .configuration
+                        .collect { appSwitchEnabled = it.appSwitchEnabled }
+                }
+            }
+        }
+    }
 
     /**
      * Starts reading the real recents stack in the background. Call when a bottom-edge
      * touch begins, so the list is ready by the time the swipe fires.
      */
-    fun prefetchTasks() = recents.refresh()
+    fun prefetchTasks() {
+        if (!enabled()) return
+        tasks.refresh()
+    }
+
+    /** Cancels the switcher scope and the recents scope. Call when the owner is torn down. */
+    fun close() {
+        scope.cancel()
+        tasks.close()
+    }
 
     // The order this walk started from, newest first, and where in it the last step landed.
     // Kept rather than re-read because usage events lag by seconds: right after a launch the
@@ -69,7 +122,12 @@ internal class AppSwitcher(
     /** A snapshot of the walk with the app that was in front when it was read. */
     private data class Walk(val apps: List<String>, val currentIndex: Int)
 
-    fun step(toPrevious: Boolean): Boolean {
+    // The 6-hour usage query and PackageManager lookups block for a perceptible time, so
+    // the heavy work runs on Dispatchers.IO rather than the caller's (main) thread.
+    fun step(toPrevious: Boolean): Boolean = runBlocking(Dispatchers.IO) { stepBlocking(toPrevious) }
+
+    @Synchronized
+    private fun stepBlocking(toPrevious: Boolean): Boolean {
         val now = SystemClock.elapsedRealtime()
         // A pause long enough, or a move by hand since the last step - home, recents, a
         // notification - means the user left the walk, so it restarts. Without the second
@@ -209,7 +267,7 @@ internal class AppSwitcher(
         // The system task list is the recents stack itself, so it matches what the user
         // sees and leaves out anything dismissed there. Usage events are the fallback for
         // when Shizuku is unavailable.
-        val tasks = recents.cached(TASKS_MAX_AGE_MS)
+        val tasks = this.tasks.cached(TASKS_MAX_AGE_MS)
         if (tasks != null) {
             val stacked = tasks.asSequence()
                 .filter { it != context.packageName && it != defaultHome }

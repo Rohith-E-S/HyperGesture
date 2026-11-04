@@ -38,6 +38,10 @@ internal object CircleToSearchLauncher {
 
     // The third method of IVoiceInteractionManagerService.aidl. Reading the stub's
     // TRANSACTION_ field instead would be blocked hidden-API reflection.
+    // Fragile by construction: the number assumes the AIDL method order. If the framework
+    // inserts a method ahead of it, this code points at the wrong method and the call
+    // misbehaves. [hasExpectedDescriptor] guards against talking to the wrong service
+    // altogether, but cannot detect a shifted index inside the right one.
     private const val SHOW_SESSION_FROM_SESSION = IBinder.FIRST_CALL_TRANSACTION + 2
 
     // ActivityManager.INVOCATION_TIME_MS_KEY, as SystemUI's AssistManager sets it.
@@ -89,9 +93,37 @@ internal object CircleToSearchLauncher {
             ?: error("no '$VOICE_INTERACTION_SERVICE' service")
     }
 
+    // Asks the binder for its interface string before calling a hardcoded transaction: a
+    // wrong service must never be transacted on. A mismatch is logged and aborts the
+    // launch rather than risking an unrelated method.
+    private fun hasExpectedDescriptor(service: IBinder): Boolean {
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        return try {
+            val ok = service.transact(IBinder.INTERFACE_TRANSACTION, data, reply, 0)
+            val actual = if (ok) reply.readString() else null
+            if (actual != DESCRIPTOR) {
+                Log.w(
+                    TAG,
+                    "Circle to Search: binder descriptor mismatch (expected $DESCRIPTOR, got $actual)",
+                )
+                false
+            } else {
+                true
+            }
+        } catch (throwable: Throwable) {
+            Log.w(TAG, "Circle to Search: binder descriptor check failed", throwable)
+            false
+        } finally {
+            reply.recycle()
+            data.recycle()
+        }
+    }
+
     // Written by hand so no hidden interface is resolved. The AIDL layout is token, typed
     // Bundle, flags, then the attribution tag since Android 14.
     private fun showSessionFromSession(service: IBinder, args: Bundle, tag: String?): Boolean {
+        if (!hasExpectedDescriptor(service)) return false
         val data = Parcel.obtain()
         val reply = Parcel.obtain()
         try {
