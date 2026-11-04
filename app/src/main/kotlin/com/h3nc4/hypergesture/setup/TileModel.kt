@@ -23,7 +23,7 @@ import androidx.annotation.RequiresApi
 import androidx.annotation.StringRes
 import com.h3nc4.hypergesture.R
 
-internal enum class TileTarget { APP, ACCESSIBILITY_SETTINGS }
+internal enum class TileTarget { TOGGLE, ACCESSIBILITY_SETTINGS, APP }
 
 /** What the tile shows and where a tap leads, kept apart from TileService so it is testable. */
 internal data class TileFace(
@@ -32,13 +32,21 @@ internal data class TileFace(
     val target: TileTarget,
 ) {
     companion object {
-        fun of(serviceEnabled: Boolean): TileFace = if (serviceEnabled) {
-            TileFace(active = true, subtitle = R.string.status_active, target = TileTarget.APP)
-        } else {
-            TileFace(
+        fun of(serviceEnabled: Boolean, gesturesEnabled: Boolean = true): TileFace = when {
+            !serviceEnabled -> TileFace(
                 active = false,
                 subtitle = R.string.status_inactive,
                 target = TileTarget.ACCESSIBILITY_SETTINGS,
+            )
+            gesturesEnabled -> TileFace(
+                active = true,
+                subtitle = R.string.status_active,
+                target = TileTarget.TOGGLE,
+            )
+            else -> TileFace(
+                active = false,
+                subtitle = R.string.status_inactive,
+                target = TileTarget.TOGGLE,
             )
         }
     }

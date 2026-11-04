@@ -43,6 +43,7 @@ import com.h3nc4.hypergesture.navigation.NavigationRecoveryRepository
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryState
 import com.h3nc4.hypergesture.setup.AccessibilityAlert
+import com.h3nc4.hypergesture.setup.GestureTileService
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
@@ -151,6 +152,7 @@ internal class AppModel(
                 withContext(Dispatchers.IO) { recoveryRunner.restoreButtons() }
             }
             refresh()
+            GestureTileService.requestRefresh(context, enabled)
         }
     }
 

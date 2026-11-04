@@ -29,17 +29,27 @@ import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.diagnostics.DiagnosticsCollector
+import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
+import com.h3nc4.hypergesture.navigation.RecoveryTrigger
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
+import com.h3nc4.hypergesture.settings.GestureSettingsRepository
 import com.h3nc4.hypergesture.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 
 // The way back when HyperOS stops the service with the bar hidden, as Control Center still opens.
 // Only the user may turn an accessibility service on. A tap on a stopped tile opens Settings.
+// When running, a tap toggles gestures on or off, and a hold opens the app.
 class GestureTileService : TileService() {
+
+    private var listeningJob: Job? = null
 
     override fun onTileAdded() {
         recordAdded(true)
@@ -52,6 +62,16 @@ class GestureTileService : TileService() {
         listening = WeakReference(this)
         // Only a tile in the panel listens, which also covers one added before this was recorded.
         recordAdded(true)
+        val settings = GestureSettingsRepository(applicationContext)
+        listeningJob?.cancel()
+        listeningJob = writes.launch {
+            settings.configuration.collect { config ->
+                lastKnownGesturesEnabled = config.enabled
+                withContext(Dispatchers.Main) {
+                    refresh()
+                }
+            }
+        }
         refresh()
     }
 
@@ -61,18 +81,58 @@ class GestureTileService : TileService() {
 
     override fun onStopListening() {
         if (listening?.get() === this) listening = null
+        listeningJob?.cancel()
+        listeningJob = null
     }
 
     override fun onClick() {
-        val target = when (currentFace().target) {
-            TileTarget.APP -> Intent(this, MainActivity::class.java)
-            TileTarget.ACCESSIBILITY_SETTINGS -> accessibilityIntent(this)
+        val face = currentFace()
+        when (face.target) {
+            TileTarget.TOGGLE -> toggleGestures()
+            TileTarget.ACCESSIBILITY_SETTINGS -> {
+                val target = accessibilityIntent(this)
+                if (isLocked) unlockAndRun { open(target) } else open(target)
+            }
+            TileTarget.APP -> {
+                val target = Intent(this, MainActivity::class.java)
+                if (isLocked) unlockAndRun { open(target) } else open(target)
+            }
         }
-        if (isLocked) unlockAndRun { open(target) } else open(target)
+    }
+
+    private fun toggleGestures() {
+        val tile = qsTile
+        if (tile != null) {
+            val nextActive = tile.state != Tile.STATE_ACTIVE
+            tile.state = if (nextActive) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+            tile.subtitle = getString(if (nextActive) R.string.status_active else R.string.status_inactive)
+            tile.updateTile()
+        }
+        writes.launch {
+            toggleMutex.withLock {
+                val settings = GestureSettingsRepository(applicationContext)
+                val current = settings.read().enabled
+                val newEnabled = !current
+                lastKnownGesturesEnabled = newEnabled
+                settings.update { it.copy(enabled = newEnabled) }
+                val recoveryRunner = NavigationRecoveryRuntime.runner(applicationContext)
+                if (newEnabled) {
+                    recoveryRunner.launch(RecoveryTrigger.MANUAL)
+                } else {
+                    withContext(Dispatchers.IO) { recoveryRunner.restoreButtons() }
+                }
+                withContext(Dispatchers.Main) {
+                    refresh()
+                }
+            }
+        }
     }
 
     private fun currentFace() =
-        TileFace.of(DiagnosticsCollector.isAccessibilityServiceEnabled(this))
+        TileFace.of(
+            serviceEnabled = DiagnosticsCollector.isAccessibilityServiceEnabled(this),
+            gesturesEnabled = lastKnownGesturesEnabled ?: true,
+        )
 
     private fun refresh() {
         val tile = qsTile ?: return
@@ -108,13 +168,20 @@ class GestureTileService : TileService() {
 
         // Kept off the service, since the system may destroy it right after onTileRemoved.
         private val writes = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private val toggleMutex = Mutex()
+
+        @Volatile
+        private var lastKnownGesturesEnabled: Boolean? = null
 
         // The system ignores requestListeningState for a tile that is already listening.
         @Volatile
         private var listening: WeakReference<GestureTileService>? = null
 
-        /** Redraws the tile as the gesture service starts or stops. */
-        fun requestRefresh(context: Context) {
+        /** Redraws the tile as the gesture service starts or stops, or configuration changes. */
+        fun requestRefresh(context: Context, gesturesEnabled: Boolean? = null) {
+            if (gesturesEnabled != null) {
+                lastKnownGesturesEnabled = gesturesEnabled
+            }
             val open = listening?.get()
             if (open != null) {
                 open.refresh()
