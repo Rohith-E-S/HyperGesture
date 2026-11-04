@@ -120,6 +120,8 @@ internal class EdgeTouchOverlay(
 
     fun remove() {
         strips.values.forEach { view ->
+            // Cancel the strip's hold/long-press timers before detach, or they can fire on a removed view.
+            (view as? TouchCaptureView)?.dispose()
             runCatching { windowManager.removeView(view) }
         }
         strips.clear()
@@ -454,6 +456,11 @@ internal class EdgeTouchOverlay(
             return handle(action, replayable)
         }
 
+        /** Called by the overlay when the strip is removed, so timers never outlive the view. */
+        fun dispose() {
+            cancelHold()
+        }
+
         // Both timers, since a long press left scheduled past the end of a touch would fire on it.
         private fun cancelHold() {
             removeCallbacks(holdRunnable)
@@ -488,7 +495,9 @@ internal class EdgeTouchOverlay(
         }
 
         private companion object {
-            const val MAX_SAMPLES = 400
+            // Each sample is a tiny data class (2 Floats + Long), so 4000 holds even a slow
+            // multi-second hold for replay while staying well within sane memory if truncated.
+            const val MAX_SAMPLES = 4000
         }
     }
 
