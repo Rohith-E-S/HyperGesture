@@ -46,14 +46,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class RecentTasksSource(
     private val shell: ShizukuShellRunner = ShizukuShellRunner(),
     private val gateway: ShizukuGateway = SystemShizukuGateway,
-    private val parentScope: CoroutineScope? = null,
     private val isAppSwitchEnabled: () -> Boolean = { true },
 ) {
 
-    // A child of the caller's scope when one is given, so cancelling the caller cancels
-    // recents work; otherwise standalone, to be cancelled by [close].
     private val scope = CoroutineScope(
-        (parentScope?.coroutineContext ?: SupervisorJob()) + Dispatchers.IO +
+        SupervisorJob() + Dispatchers.IO +
             CoroutineExceptionHandler { _, throwable ->
                 android.util.Log.w("HyperGesture", "Could not read the recents stack", throwable)
             },

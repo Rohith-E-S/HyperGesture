@@ -27,14 +27,14 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import com.h3nc4.hypergesture.diagnostics.FailureLog
-import com.h3nc4.hypergesture.settings.GestureSettingsRepository
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Walks the apps the user came from, which Android exposes to nobody: there is no global
@@ -52,58 +52,44 @@ import kotlinx.coroutines.runBlocking
  */
 internal class AppSwitcher(
     private val context: Context,
-    private val recents: RecentTasksSource? = null,
-    private val isAppSwitchEnabled: (() -> Boolean)? = null,
+    private val isAppSwitchEnabled: () -> Boolean = { true },
+    private val recents: RecentTasksSource = RecentTasksSource(isAppSwitchEnabled = isAppSwitchEnabled),
 ) {
 
-    // Latest app-switch setting, read without blocking the caller. Seeded off, matching
-    // the GestureConfiguration default, until the settings flow first emits.
-    @Volatile
-    private var appSwitchEnabled = false
-
-    private val enabled: () -> Boolean = isAppSwitchEnabled
-        ?: if (recents != null) {
-            { true }
-        } else {
-            { appSwitchEnabled }
-        }
-
-    // IO scope for config reads, step and buildWalk. Cancelled by close(); recents runs
-    // as a child of it, so close() cancels both.
+    // Background scope for precomputing the walk. Cancelled by close().
     private val scope = CoroutineScope(
         SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, throwable ->
             Log.w(TAG, "app switch: background work failed", throwable)
         },
     )
 
-    private val tasks: RecentTasksSource = recents
-        ?: RecentTasksSource(parentScope = scope, isAppSwitchEnabled = enabled)
-
-    init {
-        if (isAppSwitchEnabled == null && recents == null) {
-            scope.launch {
-                runCatching {
-                    GestureSettingsRepository(context.applicationContext)
-                        .configuration
-                        .collect { appSwitchEnabled = it.appSwitchEnabled }
-                }
-            }
-        }
-    }
+    private val prefetching = AtomicBoolean()
 
     /**
-     * Starts reading the real recents stack in the background. Call when a bottom-edge
-     * touch begins, so the list is ready by the time the swipe fires.
+     * Starts reading the real recents stack and precomputing the walk in the background.
+     * Call when a bottom-edge touch begins, so the list is ready by the time the swipe fires.
      */
     fun prefetchTasks() {
-        if (!enabled()) return
-        tasks.refresh()
+        if (!isAppSwitchEnabled()) return
+        recents.refresh()
+        if (!prefetching.compareAndSet(false, true)) return
+        if (!scope.isActive) {
+            prefetching.set(false)
+            return
+        }
+        scope.launch {
+            try {
+                prepareWalk()
+            } finally {
+                prefetching.set(false)
+            }
+        }
     }
 
     /** Cancels the switcher scope and the recents scope. Call when the owner is torn down. */
     fun close() {
         scope.cancel()
-        tasks.close()
+        recents.close()
     }
 
     // The order this walk started from, newest first, and where in it the last step landed.
@@ -122,43 +108,28 @@ internal class AppSwitcher(
     /** A snapshot of the walk with the app that was in front when it was read. */
     private data class Walk(val apps: List<String>, val currentIndex: Int)
 
-    // The 6-hour usage query and PackageManager lookups block for a perceptible time, so
-    // the heavy work runs on Dispatchers.IO rather than the caller's (main) thread.
-    fun step(toPrevious: Boolean): Boolean = runBlocking(Dispatchers.IO) { stepBlocking(toPrevious) }
-
-    @Synchronized
-    private fun stepBlocking(toPrevious: Boolean): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        // A pause long enough, or a move by hand since the last step - home, recents, a
-        // notification - means the user left the walk, so it restarts. Without the second
-        // check a step within the window would continue the stale position and open the
-        // wrong app: select something in recents, swipe, and the next swipe carries on
-        // from where the previous chain stopped.
-        val chained = walk.isNotEmpty() &&
-            now - lastStepAt <= CHAIN_WINDOW_MS &&
-            !movedByHandSince(lastStepWallClock, lastTarget)
-        if (!chained) {
-            val built = buildWalk()
-            walk = built.apps
-            // -1 when the app in front is not a switch target of its own, such as the
-            // home screen or HyperGesture itself: the first step then lands on the newest
-            // app rather than skipping past it.
-            position = built.currentIndex
-        }
-        if (walk.isEmpty()) {
+    // The walk is precomputed in prefetchTasks on Dispatchers.IO, so firing only reads
+    // the cached order: no usage query runs on the caller's thread.
+    fun step(toPrevious: Boolean): Boolean {
+        if (!isAppSwitchEnabled()) return false
+        val (currentWalk, currentPosition) = synchronized(this) { walk to position }
+        if (currentWalk.isEmpty()) {
+            // Nothing precomputed yet (first swipe, or prefetch not finished): arm the
+            // background build for the next swipe instead of querying here.
+            prefetchTasks()
             val message = "app switch: no usage events, so usage access is probably not granted"
             lastFailure = message
             Log.w(TAG, message)
             return false
         }
 
-        val next = position + if (toPrevious) 1 else -1
-        if (next !in walk.indices) {
+        val next = currentPosition + if (toPrevious) 1 else -1
+        if (next !in currentWalk.indices) {
             lastFailure = "app switch: nothing ${if (toPrevious) "older" else "newer"} than this"
             return false
         }
 
-        val target = walk[next]
+        val target = currentWalk[next]
         val intent = context.packageManager.getLaunchIntentForPackage(target)
         if (intent == null) {
             val message = "app switch: $target has no launcher entry"
@@ -172,6 +143,7 @@ internal class AppSwitcher(
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
 
         val launchedAt = System.currentTimeMillis()
+        val steppedAt = SystemClock.elapsedRealtime()
         return runCatching { context.startActivity(intent) }
             .onFailure { throwable ->
                 val message = "app switch: starting $target threw ${throwable.javaClass.name}"
@@ -179,13 +151,47 @@ internal class AppSwitcher(
                 FailureLog.record(context, "app switcher", throwable = throwable, message = message)
             }
             .onSuccess {
-                position = next
-                lastStepAt = now
-                lastStepWallClock = launchedAt
-                lastTarget = target
+                synchronized(this) {
+                    // Only advance if the walk has not been replaced since it was read.
+                    if (walk === currentWalk) {
+                        position = next
+                        lastStepAt = steppedAt
+                        lastStepWallClock = launchedAt
+                        lastTarget = target
+                    }
+                }
                 lastFailure = null
             }
             .isSuccess
+    }
+
+    // Runs on the background scope: decides chained versus fresh with a usage query and
+    // builds a fresh walk with the 6-hour query, both off the caller's thread.
+    private fun prepareWalk() {
+        val snapshotLastStepAt = synchronized(this) { lastStepAt }
+        val snapshotLastWallClock = synchronized(this) { lastStepWallClock }
+        val snapshotLastTarget = synchronized(this) { lastTarget }
+        val snapshotEmpty = synchronized(this) { walk.isEmpty() }
+        val now = SystemClock.elapsedRealtime()
+        // A pause long enough, or a move by hand since the last step - home, recents, a
+        // notification - means the user left the walk, so it restarts. Without the second
+        // check a step within the window would continue the stale position and open the
+        // wrong app: select something in recents, swipe, and the next swipe carries on
+        // from where the previous chain stopped.
+        val chained = !snapshotEmpty &&
+            now - snapshotLastStepAt <= CHAIN_WINDOW_MS &&
+            !movedByHandSince(snapshotLastWallClock, snapshotLastTarget)
+        if (chained) return
+        val built = buildWalk()
+        synchronized(this) {
+            // A step that launched while rebuilding owns the walk now; do not clobber it.
+            if (lastStepAt != snapshotLastStepAt) return
+            walk = built.apps
+            // -1 when the app in front is not a switch target of its own, such as the
+            // home screen or HyperGesture itself: the first step then lands on the newest
+            // app rather than skipping past it.
+            position = built.currentIndex
+        }
     }
 
     /**
@@ -267,7 +273,7 @@ internal class AppSwitcher(
         // The system task list is the recents stack itself, so it matches what the user
         // sees and leaves out anything dismissed there. Usage events are the fallback for
         // when Shizuku is unavailable.
-        val tasks = this.tasks.cached(TASKS_MAX_AGE_MS)
+        val tasks = recents.cached(TASKS_MAX_AGE_MS)
         if (tasks != null) {
             val stacked = tasks.asSequence()
                 .filter { it != context.packageName && it != defaultHome }
