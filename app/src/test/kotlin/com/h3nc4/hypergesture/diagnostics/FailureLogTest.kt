@@ -99,4 +99,35 @@ class FailureLogTest {
         assertTrue(entry.contains("API 36"))
         assertTrue(!entry.contains("null"))
     }
+
+    @Test
+    fun `formatEntry formats osInfo correctly when sdkInt is zero`() {
+        val entry = FailureLog.formatEntry(
+            label = "test",
+            sdkInt = 0,
+            release = "15",
+            timestamp = "2026-11-04 12:00:00",
+        )
+        assertTrue(entry.contains("Android 15"))
+        assertTrue(!entry.contains("API 0"))
+    }
+
+    @Test
+    fun `formatEntry formats without osInfo or devInfo when omitted`() {
+        val entry = FailureLog.formatEntry(
+            label = "test-no-meta",
+            manufacturer = null,
+            model = null,
+            release = null,
+            sdkInt = 0,
+            timestamp = "2026-11-04 12:00:00",
+        )
+        assertEquals("[2026-11-04 12:00:00] test-no-meta", entry)
+    }
+
+    @Test
+    fun `currentTimestamp produces expected format`() {
+        val ts = FailureLog.currentTimestamp()
+        assertTrue(ts.matches(Regex("""\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}""")))
+    }
 }
