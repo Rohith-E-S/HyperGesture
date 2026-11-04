@@ -31,8 +31,6 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 
 private const val TAG = "HyperGesture"
@@ -42,39 +40,36 @@ internal class SessionApkInstaller(private val context: Context) : ApkInstaller 
 
     override fun canInstall(): Boolean = context.packageManager.canRequestPackageInstalls()
 
-    // Copying and fsyncing an APK blocks, so this runs on IO rather than the main thread.
-    override suspend fun install(file: File): String? = withContext(Dispatchers.IO) {
-        runCatching {
-            val installer = context.packageManager.packageInstaller
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
-            params.setAppPackageName(context.packageName)
-            params.setSize(file.length())
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+    override fun install(file: File): String? = runCatching {
+        val installer = context.packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        params.setAppPackageName(context.packageName)
+        params.setSize(file.length())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+        }
+        val sessionId = installer.createSession(params)
+        val opened = installer.openSession(sessionId)
+        try {
+            opened.openWrite(ReleaseParser.APK_NAME, 0, file.length()).use { output ->
+                file.inputStream().use { it.copyTo(output) }
+                opened.fsync(output)
             }
-            val sessionId = installer.createSession(params)
-            val opened = installer.openSession(sessionId)
-            try {
-                opened.openWrite(ReleaseParser.APK_NAME, 0, file.length()).use { output ->
-                    file.inputStream().use { it.copyTo(output) }
-                    opened.fsync(output)
-                }
-                // Mutable, since the installer writes its status into the extras.
-                val callback = PendingIntent.getBroadcast(
-                    context,
-                    sessionId,
-                    Intent(context, InstallResultReceiver::class.java),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-                )
-                opened.commit(callback.intentSender)
-            } catch (e: Exception) {
-                runCatching { opened.abandon() }
-                throw e
-            } finally {
-                runCatching { opened.close() }
-            }
-        }.exceptionOrNull()?.reason()
-    }
+            // Mutable, since the installer writes its status into the extras.
+            val callback = PendingIntent.getBroadcast(
+                context,
+                sessionId,
+                Intent(context, InstallResultReceiver::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+            )
+            opened.commit(callback.intentSender)
+        } catch (e: Exception) {
+            runCatching { opened.abandon() }
+            throw e
+        } finally {
+            runCatching { opened.close() }
+        }
+    }.exceptionOrNull()?.reason()
 }
 
 class InstallResultReceiver : BroadcastReceiver() {

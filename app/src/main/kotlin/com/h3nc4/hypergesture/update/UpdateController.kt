@@ -19,11 +19,13 @@ package com.h3nc4.hypergesture.update
 
 import android.content.pm.PackageInstaller
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import java.io.File
 
 internal sealed interface FetchResult {
@@ -95,7 +97,7 @@ internal interface ApkInstaller {
     fun canInstall(): Boolean
 
     /** Hands the file to the system, which answers later through [UpdateController.onInstallOutcome]. */
-    suspend fun install(file: File): String?
+    fun install(file: File): String?
 }
 
 internal interface UpdateStore {
@@ -247,7 +249,8 @@ internal class UpdateController(
                 update { it.copy(phase = UpdatePhase.DownloadFailed(unverified)) }
                 return
             }
-            val refusal = installer.install(downloaded.file)
+            // The installer's copy and fsync block, so keep them off the main thread.
+            val refusal = withContext(Dispatchers.IO) { installer.install(downloaded.file) }
             update {
                 it.copy(phase = refusal?.let(UpdatePhase::InstallNotStarted) ?: UpdatePhase.Confirming)
             }
