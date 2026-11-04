@@ -309,5 +309,9 @@ internal class AppSwitcher(
         @Volatile
         var lastFailure: String? = null
             private set
+
+        fun clearFailure() {
+            lastFailure = null
+        }
     }
 }

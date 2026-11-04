@@ -96,5 +96,10 @@ class GestureActionPerformer(private val service: AccessibilityService) {
         @Volatile
         var lastFailure: String? = null
             private set
+
+        fun clearFailures() {
+            lastCircleToSearchFailure = null
+            lastFailure = null
+        }
     }
 }

@@ -17,9 +17,6 @@
 
 package com.h3nc4.hypergesture.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
@@ -29,7 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -43,31 +40,18 @@ import com.h3nc4.hypergesture.navigation.HyperOSNavigationIntegration
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.RecoveryState
 import com.h3nc4.hypergesture.navigation.RecoveryStatus
-import kotlinx.coroutines.launch
 
 @Composable
 internal fun TroubleshootingScreen(model: AppModel) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val copiedMessage = stringResource(R.string.snackbar_report_copied)
     LaunchedEffect(Unit) { model.refresh() }
     val diagnostics = model.diagnostics
     val recovery = model.recoveryState
+    val shizukuInstalled = remember(diagnostics) { isShizukuInstalled(context) }
 
     SectionHeader(stringResource(R.string.section_known_fixes))
 
     // Dynamic contextual recommendations based on current system and error state
-    if (diagnostics.serviceStatus == ServiceStatus.STOPPED) {
-        InfoRow(
-            title = stringResource(R.string.fix_service_stopped_title),
-            supporting = stringResource(R.string.fix_service_stopped_body),
-            actions = {
-                OutlinedButton(onClick = { openAccessibility(context) }) {
-                    Text(stringResource(R.string.action_open))
-                }
-            },
-        )
-    }
     if (!model.usageAccess && diagnostics.lastAppSwitchFailure != null) {
         InfoRow(
             title = stringResource(R.string.fix_usage_access_title),
@@ -101,7 +85,7 @@ internal fun TroubleshootingScreen(model: AppModel) {
             },
         )
     }
-    if (recovery.enabled && recovery.status == RecoveryStatus.SHIZUKU_UNAVAILABLE && isShizukuInstalled(context)) {
+    if (recovery.enabled && recovery.status == RecoveryStatus.SHIZUKU_UNAVAILABLE && shizukuInstalled) {
         InfoRow(
             title = stringResource(R.string.fix_shizuku_unavailable_title),
             supporting = stringResource(R.string.fix_shizuku_unavailable_body),
@@ -124,8 +108,14 @@ internal fun TroubleshootingScreen(model: AppModel) {
         },
     )
     InfoRow(
-        title = stringResource(R.string.fix_stopped_title),
-        supporting = stringResource(R.string.fix_stopped_body),
+        title = stringResource(
+            if (diagnostics.serviceStatus == ServiceStatus.STOPPED) R.string.fix_service_stopped_title
+            else R.string.fix_stopped_title,
+        ),
+        supporting = stringResource(
+            if (diagnostics.serviceStatus == ServiceStatus.STOPPED) R.string.fix_service_stopped_body
+            else R.string.fix_stopped_body,
+        ),
         actions = {
             OutlinedButton(onClick = { openAccessibility(context) }) {
                 Text(stringResource(R.string.action_open))
@@ -178,7 +168,7 @@ internal fun TroubleshootingScreen(model: AppModel) {
             },
         )
         Text(
-            text = failure.take(MAX_FAILURE_CHARS),
+            text = failure,
             style = MaterialTheme.typography.bodySmall,
             fontFamily = FontFamily.Monospace,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -190,14 +180,7 @@ internal fun TroubleshootingScreen(model: AppModel) {
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         OutlinedButton(
-            onClick = {
-                val report = model.generateDiagnosticReport()
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                clipboard?.setPrimaryClip(ClipData.newPlainText("HyperGesture Diagnostics", report))
-                scope.launch {
-                    model.snackbar.showSnackbar(copiedMessage)
-                }
-            },
+            onClick = model::copyDiagnosticReport,
             modifier = Modifier.tagged(TestTags.ACTION_COPY_REPORT),
         ) {
             Text(stringResource(R.string.action_copy_report))
@@ -263,5 +246,3 @@ private fun integrationLabel(id: String): String = when (id) {
     GenericAndroidNavigationIntegration.ID -> stringResource(R.string.integration_generic)
     else -> id
 }
-
-private const val MAX_FAILURE_CHARS = 3000

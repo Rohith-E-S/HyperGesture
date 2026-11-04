@@ -34,14 +34,9 @@ object FailureLog {
 
     private const val TAG = "HyperGesture"
     private const val FILE_NAME = "last_failure.txt"
-    private const val MAX_BYTES = 32 * 1024
+    private const val MAX_CHARS = 16 * 1024
 
-    fun record(context: Context, label: String, throwable: Throwable) =
-        record(context, label, throwable = throwable, message = null)
-
-    fun record(context: Context, label: String, message: String) =
-        record(context, label, throwable = null, message = message)
-
+    @Synchronized
     fun record(
         context: Context,
         label: String,
@@ -67,7 +62,7 @@ object FailureLog {
         runCatching {
             val target = file(context)
             val existing = if (target.exists()) target.readText().trim() else null
-            val combined = combineEntries(entry, existing, MAX_BYTES)
+            val combined = combineEntries(entry, existing, MAX_CHARS)
             target.writeText(combined)
         }.onFailure { Log.e(TAG, "Could not persist the failure record", it) }
     }
@@ -107,13 +102,13 @@ object FailureLog {
         }
     }.trimEnd()
 
-    internal fun combineEntries(newEntry: String, existing: String?, maxBytes: Int = MAX_BYTES): String {
+    internal fun combineEntries(newEntry: String, existing: String?, maxChars: Int = MAX_CHARS): String {
         val base = if (existing.isNullOrBlank()) {
             newEntry
         } else {
             "$newEntry\n\n========================================\n\n$existing"
         }
-        return base.take(maxBytes)
+        return base.take(maxChars)
     }
 
     internal fun currentTimestamp(): String =

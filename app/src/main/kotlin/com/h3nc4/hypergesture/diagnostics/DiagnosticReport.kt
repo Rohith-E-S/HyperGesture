@@ -17,6 +17,7 @@
 
 package com.h3nc4.hypergesture.diagnostics
 
+import android.text.format.DateUtils
 import com.h3nc4.hypergesture.navigation.RecoveryState
 import com.h3nc4.hypergesture.ui.Assistant
 
@@ -54,8 +55,13 @@ internal object DiagnosticReport {
         appendLine("- **Recovery Enabled:** ${recoveryState.enabled}")
         appendLine("- **Recovery Status:** ${recoveryState.status.name}")
         appendLine("- **Last Trigger:** ${recoveryState.lastTrigger?.name ?: "None"}")
-        recoveryState.lastAttemptAt?.let {
-            appendLine("- **Last Attempt Timestamp:** $it")
+        recoveryState.lastAttemptAt?.let { at ->
+            val relative = DateUtils.getRelativeTimeSpanString(
+                at,
+                System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS,
+            )
+            appendLine("- **Last Attempt:** $relative")
         }
         appendLine()
         appendLine("#### Recent Problems")

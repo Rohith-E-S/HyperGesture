@@ -78,7 +78,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
      * kills the process and gets the service reported as malfunctioning.
      */
     private val coroutineFailures = CoroutineExceptionHandler { _, throwable ->
-        FailureLog.record(this, "settings collector", throwable)
+        FailureLog.record(this, "settings collector", throwable = throwable)
     }
     private val scope =
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + coroutineFailures)
@@ -125,7 +125,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             setUp()
             true
         } catch (t: Throwable) {
-            FailureLog.record(this, "onServiceConnected", t)
+            FailureLog.record(this, "onServiceConnected", throwable = t)
             false
         }
         GestureTileService.requestRefresh(this)
@@ -366,7 +366,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
                     handler,
                 )
             }.getOrElse { throwable ->
-                FailureLog.record(this, "dispatchGesture", throwable)
+                FailureLog.record(this, "dispatchGesture", throwable = throwable)
                 false
             }
             if (dispatched) {

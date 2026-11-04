@@ -57,12 +57,10 @@ fi
 # hold_still <x> <seconds per step> - a resting finger that jitters by a pixel, so MOVE events
 # keep arriving past the arm window as they do from a real finger.
 hold_still() {
-  "${ADB_BIN}" shell input motionevent DOWN "$1" "${BOTTOM_Y}" >/dev/null
-  for dx in 1 0 1 0; do
-    sleep "$2"
-    "${ADB_BIN}" shell input motionevent MOVE $(($1 + dx)) "${BOTTOM_Y}" >/dev/null
-  done
-  "${ADB_BIN}" shell input motionevent UP "$1" "${BOTTOM_Y}" >/dev/null
+  _x="$1"
+  _step="$2"
+  _x1=$((_x + 1))
+  "${ADB_BIN}" shell "input motionevent DOWN ${_x} ${BOTTOM_Y}; sleep ${_step}; input motionevent MOVE ${_x1} ${BOTTOM_Y}; sleep ${_step}; input motionevent MOVE ${_x} ${BOTTOM_Y}; sleep ${_step}; input motionevent MOVE ${_x1} ${BOTTOM_Y}; sleep ${_step}; input motionevent MOVE ${_x} ${BOTTOM_Y}; sleep ${_step}; input motionevent UP ${_x} ${BOTTOM_Y}" >/dev/null
 }
 
 # dumpsys lists a bound service by its label, so the app name is what to look for.

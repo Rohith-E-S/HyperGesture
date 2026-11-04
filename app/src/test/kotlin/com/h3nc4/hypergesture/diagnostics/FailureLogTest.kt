@@ -70,10 +70,10 @@ class FailureLogTest {
     }
 
     @Test
-    fun `combineEntries respects maxBytes limit`() {
+    fun `combineEntries respects maxChars limit`() {
         val newEntry = "A".repeat(50)
         val existing = "B".repeat(100)
-        val combined = FailureLog.combineEntries(newEntry, existing, maxBytes = 60)
+        val combined = FailureLog.combineEntries(newEntry, existing, maxChars = 60)
         assertEquals(60, combined.length)
         assertTrue(combined.startsWith("A".repeat(50)))
     }

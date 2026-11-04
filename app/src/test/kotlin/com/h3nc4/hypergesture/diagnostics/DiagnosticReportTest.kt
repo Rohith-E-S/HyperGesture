@@ -5,7 +5,8 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.\n//
+// (at your option) any later version.
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -78,6 +79,7 @@ class DiagnosticReportTest {
         assertTrue(report.contains("- **Recovery Enabled:** true"))
         assertTrue(report.contains("- **Recovery Status:** VERIFIED"))
         assertTrue(report.contains("- **Last Trigger:** RESUME"))
+        assertTrue(report.contains("- **Last Attempt:**"))
         assertTrue(report.contains("[2026-11-04 12:00:00] test-failure"))
     }
 }

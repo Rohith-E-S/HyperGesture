@@ -506,7 +506,7 @@ internal object NavigationRecoveryRuntime {
 
     private fun create(context: Context): NavigationRecoveryRunner {
         val failures = CoroutineExceptionHandler { _, throwable ->
-            FailureLog.record(context, "navigation recovery", throwable)
+            FailureLog.record(context, "navigation recovery", throwable = throwable)
         }
         val gestureSettings = GestureSettingsRepository(context)
         return NavigationRecoveryRunner(
