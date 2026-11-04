@@ -105,8 +105,14 @@ class GestureSettingsRepositoryTest {
         )
         assertEquals(999L, repo.read().recentsHoldMs)
 
-        // Stored value should still be overridden if debug override is present
+        // Note: update() calls read(), which also evaluates debugRecentsHold, so the transform
+        // receives 999L as input. Even after writing a new value (123L) to DataStore, this repo
+        // continues returning 999L due to the active override.
         repo.update { it.copy(recentsHoldMs = 123L) }
         assertEquals(999L, repo.read().recentsHoldMs)
+
+        // An un-overridden instance on the same store confirms 123L was indeed persisted.
+        val unoverriddenRepo = GestureSettingsRepository(dataStore = store)
+        assertEquals(123L, unoverriddenRepo.read().recentsHoldMs)
     }
 }

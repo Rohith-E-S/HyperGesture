@@ -110,7 +110,11 @@ class GestureSettingsRepository internal constructor(
         const val RECENTS_HOLD_OVERRIDE = "hypergesture_recents_hold_ms"
         const val APP_SWITCH_OVERRIDE = "hypergesture_app_switch"
 
-        /** Test seam that spares the debug emulator run a tap on the toggle. Debug only. */
+        /**
+         * Test seam that spares the debug emulator run a tap on the toggle. Debug only.
+         * The FLAG_DEBUGGABLE gate ensures release builds never query Settings.Global.
+         * Exercised in emulator/device E2E suites; on JVM tests, simulated via the functional seam.
+         */
         private fun debugAppSwitchEnabled(context: Context): Boolean? {
             if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
             return runCatching {
@@ -124,6 +128,7 @@ class GestureSettingsRepository internal constructor(
          * Test seam for the emulator suite, which cannot deliver a gap-free touch stream: on a
          * loaded machine input stalls past the hold window and a continuous swipe is read as a
          * hold. Only consulted in a debuggable build, so a release APK never reaches it.
+         * Exercised in emulator/device E2E suites; on JVM tests, simulated via the functional seam.
          */
         private fun debugRecentsHoldMs(context: Context): Long? {
             if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
