@@ -28,4 +28,8 @@ if [ -z "${version}" ]; then
   exit 2
 fi
 
+current_code=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
+new_code=$((current_code + 1))
+
+sed -i "s/versionCode = .*/versionCode = ${new_code}/" app/build.gradle.kts
 sed -i 's/versionName = ".*"/versionName = "'"${version}"'"/' app/build.gradle.kts

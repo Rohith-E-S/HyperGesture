@@ -30,11 +30,14 @@ import android.provider.Settings
 internal class NavigationSettingsObserver(
     private val context: Context,
     private val runner: NavigationRecoveryRunner,
-    handler: Handler? = null,
+    private val handler: Handler? = null,
 ) : ContentObserver(handler) {
 
+    private val launch = Runnable { runner.launch(RecoveryTrigger.SETTINGS_OBSERVER) }
+
     override fun onChange(selfChange: Boolean, uri: Uri?) {
-        runner.launch(RecoveryTrigger.SETTINGS_OBSERVER)
+        handler?.removeCallbacks(launch)
+        handler?.postDelayed(launch, DEBOUNCE_MS) ?: runner.launch(RecoveryTrigger.SETTINGS_OBSERVER)
     }
 
     fun register() {
@@ -47,6 +50,7 @@ internal class NavigationSettingsObserver(
     }
 
     fun unregister() {
+        handler?.removeCallbacks(launch)
         runCatching { context.contentResolver.unregisterContentObserver(this) }
     }
 
@@ -54,5 +58,6 @@ internal class NavigationSettingsObserver(
         const val FSG = "force_fsg_nav_bar"
         const val NAVIGATION_MODE = "navigation_mode"
         const val GESTURE_VERSION = "use_gesture_version_three"
+        const val DEBOUNCE_MS = 500L
     }
 }
