@@ -165,8 +165,8 @@ wait_for_stream_release() {
     sleep 0.2
     wait_try=$((wait_try + 1))
   done
-  sleep 0.5
-  return 0
+  echo "Timed out waiting for stream release" >&2
+  return 1
 }
 
 resumed_activity() {

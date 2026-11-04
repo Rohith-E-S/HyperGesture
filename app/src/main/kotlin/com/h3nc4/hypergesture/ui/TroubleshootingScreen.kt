@@ -52,7 +52,7 @@ internal fun TroubleshootingScreen(model: AppModel) {
     SectionHeader(stringResource(R.string.section_known_fixes))
 
     // Dynamic contextual recommendations based on current system and error state
-    if (!model.usageAccess && diagnostics.lastAppSwitchFailure != null) {
+    if (!model.usageAccess && diagnostics.lastAppSwitchFailure?.contains("usage access", ignoreCase = true) == true) {
         InfoRow(
             title = stringResource(R.string.fix_usage_access_title),
             supporting = stringResource(R.string.fix_usage_access_body),
@@ -63,7 +63,7 @@ internal fun TroubleshootingScreen(model: AppModel) {
             },
         )
     }
-    if (diagnostics.lastCircleToSearchFailure != null) {
+    if (diagnostics.lastCircleToSearchFailure?.contains("assistant", ignoreCase = true) == true) {
         InfoRow(
             title = stringResource(R.string.fix_assistant_title),
             supporting = stringResource(R.string.fix_assistant_body),
@@ -167,8 +167,13 @@ internal fun TroubleshootingScreen(model: AppModel) {
                 }
             },
         )
+        val displayText = if (failure.length > DISPLAY_FAILURE_CHARS) {
+            "${failure.take(DISPLAY_FAILURE_CHARS)}\n... (${failure.length - DISPLAY_FAILURE_CHARS} more chars in clipboard report)"
+        } else {
+            failure
+        }
         Text(
-            text = failure,
+            text = displayText,
             style = MaterialTheme.typography.bodySmall,
             fontFamily = FontFamily.Monospace,
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -246,3 +251,6 @@ private fun integrationLabel(id: String): String = when (id) {
     GenericAndroidNavigationIntegration.ID -> stringResource(R.string.integration_generic)
     else -> id
 }
+
+private const val DISPLAY_FAILURE_CHARS = 2000
+

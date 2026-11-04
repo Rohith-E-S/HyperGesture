@@ -29,6 +29,13 @@ internal object DiagnosticReport {
         usageAccess: Boolean,
         assistant: Assistant,
         batteryUnrestricted: Boolean,
+        timeFormatter: (Long) -> CharSequence = { at ->
+            DateUtils.getRelativeTimeSpanString(
+                at,
+                System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS,
+            )
+        },
     ): String = buildString {
         appendLine("### HyperGesture Diagnostics")
         appendLine("- **App Version:** ${diagnostics.appVersionName ?: "Unknown"}")
@@ -56,11 +63,7 @@ internal object DiagnosticReport {
         appendLine("- **Recovery Status:** ${recoveryState.status.name}")
         appendLine("- **Last Trigger:** ${recoveryState.lastTrigger?.name ?: "None"}")
         recoveryState.lastAttemptAt?.let { at ->
-            val relative = DateUtils.getRelativeTimeSpanString(
-                at,
-                System.currentTimeMillis(),
-                DateUtils.MINUTE_IN_MILLIS,
-            )
+            val relative = timeFormatter(at)
             appendLine("- **Last Attempt:** $relative")
         }
         appendLine()
@@ -74,9 +77,9 @@ internal object DiagnosticReport {
         if (recorded.isNullOrBlank()) {
             appendLine("None")
         } else {
-            appendLine("```")
+            appendLine("````")
             appendLine(recorded)
-            appendLine("```")
+            appendLine("````")
         }
     }
 }

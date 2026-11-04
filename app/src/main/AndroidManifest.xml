@@ -59,6 +59,7 @@
         <intent>
             <action android:name="android.settings.ACCESSIBILITY_DETAILS_SETTINGS" />
         </intent>
+        <package android:name="moe.shizuku.privileged.api" />
     </queries>
 
     <application

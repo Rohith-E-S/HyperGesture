@@ -75,6 +75,28 @@ class FailureLogTest {
         val existing = "B".repeat(100)
         val combined = FailureLog.combineEntries(newEntry, existing, maxChars = 60)
         assertEquals(60, combined.length)
-        assertTrue(combined.startsWith("A".repeat(50)))
+        assertTrue(combined.startsWith("A".repeat(43)))
+        assertTrue(combined.endsWith("\n... [truncated]"))
+    }
+
+    @Test
+    fun `combineEntries truncates when new entry alone exceeds maxChars`() {
+        val newEntry = "X".repeat(100)
+        val combined = FailureLog.combineEntries(newEntry, null, maxChars = 50)
+        assertEquals(50, combined.length)
+        assertTrue(combined.startsWith("X".repeat(33)))
+        assertTrue(combined.endsWith("\n... [truncated]"))
+    }
+
+    @Test
+    fun `formatEntry formats osInfo correctly when release is null`() {
+        val entry = FailureLog.formatEntry(
+            label = "test",
+            sdkInt = 36,
+            release = null,
+            timestamp = "2026-11-04 12:00:00",
+        )
+        assertTrue(entry.contains("API 36"))
+        assertTrue(!entry.contains("null"))
     }
 }

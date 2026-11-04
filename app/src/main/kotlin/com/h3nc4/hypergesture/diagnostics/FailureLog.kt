@@ -23,6 +23,7 @@ import android.util.Log
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.concurrent.Executors
 
 /**
  * Logcat cannot be trusted on the target ROM: its global `log.tag` threshold drops debug
@@ -35,8 +36,12 @@ object FailureLog {
     private const val TAG = "HyperGesture"
     private const val FILE_NAME = "last_failure.txt"
     private const val MAX_CHARS = 16 * 1024
+    private const val TRUNCATED_MARKER = "\n... [truncated]"
 
-    @Synchronized
+    private val ioExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "hypergesture-failure-log").apply { isDaemon = true }
+    }
+
     fun record(
         context: Context,
         label: String,
@@ -59,19 +64,26 @@ object FailureLog {
             sdkInt = Build.VERSION.SDK_INT,
             timestamp = timestamp,
         )
-        runCatching {
-            val target = file(context)
-            val existing = if (target.exists()) target.readText().trim() else null
-            val combined = combineEntries(entry, existing, MAX_CHARS)
-            target.writeText(combined)
-        }.onFailure { Log.e(TAG, "Could not persist the failure record", it) }
+        val appContext = context.applicationContext ?: context
+        ioExecutor.execute {
+            synchronized(this) {
+                runCatching {
+                    val target = file(appContext)
+                    val existing = if (target.exists()) target.readText().trim() else null
+                    val combined = combineEntries(entry, existing, MAX_CHARS)
+                    target.writeText(combined)
+                }.onFailure { Log.e(TAG, "Could not persist the failure record", it) }
+            }
+        }
     }
 
+    @Synchronized
     fun read(context: Context): String? = runCatching {
         val file = file(context)
         if (file.exists()) file.readText().ifBlank { null } else null
     }.getOrNull()
 
+    @Synchronized
     fun clear(context: Context) {
         runCatching { file(context).delete() }
     }
@@ -88,7 +100,12 @@ object FailureLog {
     ): String = buildString {
         appendLine("[$timestamp] $label")
         val devInfo = listOfNotNull(manufacturer, model).joinToString(" ").ifBlank { null }
-        val osInfo = if (release != null || sdkInt > 0) "Android $release (API $sdkInt)" else null
+        val osInfo = when {
+            release != null && sdkInt > 0 -> "Android $release (API $sdkInt)"
+            release != null -> "Android $release"
+            sdkInt > 0 -> "API $sdkInt"
+            else -> null
+        }
         val meta = listOfNotNull(devInfo?.let { "device: $it" }, osInfo).joinToString(" | ")
         if (meta.isNotBlank()) {
             appendLine(meta)
@@ -108,7 +125,9 @@ object FailureLog {
         } else {
             "$newEntry\n\n========================================\n\n$existing"
         }
-        return base.take(maxChars)
+        if (base.length <= maxChars) return base
+        val takeLen = (maxChars - TRUNCATED_MARKER.length).coerceAtLeast(0)
+        return "${base.take(takeLen)}$TRUNCATED_MARKER"
     }
 
     internal fun currentTimestamp(): String =

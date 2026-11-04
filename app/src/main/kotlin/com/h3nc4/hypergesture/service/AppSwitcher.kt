@@ -118,8 +118,7 @@ internal class AppSwitcher(
             .onFailure { throwable ->
                 val message = "app switch: starting $target threw ${throwable.javaClass.name}"
                 lastFailure = message
-                FailureLog.record(context, "app switcher", throwable, message)
-                Log.w(TAG, "startActivity($target) threw", throwable)
+                FailureLog.record(context, "app switcher", throwable = throwable, message = message)
             }
             .onSuccess {
                 position = next

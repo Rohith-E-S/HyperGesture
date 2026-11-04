@@ -84,7 +84,8 @@ internal fun openAssistantSettings(context: Context) = context.startFirst(
 internal const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
 
 internal fun isShizukuInstalled(context: Context): Boolean = runCatching {
-    context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0) != null
+    context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE) != null ||
+        context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0) != null
 }.getOrDefault(false)
 
 internal fun openShizuku(context: Context) {

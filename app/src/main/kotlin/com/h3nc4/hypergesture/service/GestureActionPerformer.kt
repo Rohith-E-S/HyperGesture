@@ -59,8 +59,7 @@ class GestureActionPerformer(private val service: AccessibilityService) {
             .getOrElse { throwable ->
                 val message = "${action.id}: performGlobalAction threw ${throwable.javaClass.name}"
                 lastFailure = message
-                FailureLog.record(service, "global action", throwable, message)
-                Log.w(TAG, "performGlobalAction(${action.id}) threw", throwable)
+                FailureLog.record(service, "global action", throwable = throwable, message = message)
                 return false
             }
         if (!performed) {
@@ -68,7 +67,6 @@ class GestureActionPerformer(private val service: AccessibilityService) {
             val message = "${action.id}: performGlobalAction returned false"
             lastFailure = message
             FailureLog.record(service, "global action", message = message)
-            Log.w(TAG, "performGlobalAction(${action.id}) returned false")
         }
         return performed
     }

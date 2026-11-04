@@ -77,7 +77,6 @@ internal class EdgeTouchOverlay(
     private val streamWatchdog = Runnable {
         if (streamHeld) {
             val message = "Stream held timed out after ${STREAM_WATCHDOG_TIMEOUT_MS}ms, forcing release"
-            Log.w(TAG, message)
             FailureLog.record(context, "touch stream watchdog", message = message)
             releaseStream()
         }

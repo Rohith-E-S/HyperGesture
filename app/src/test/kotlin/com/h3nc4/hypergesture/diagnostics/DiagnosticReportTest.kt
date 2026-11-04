@@ -63,6 +63,7 @@ class DiagnosticReportTest {
             usageAccess = true,
             assistant = Assistant.GOOGLE,
             batteryUnrestricted = true,
+            timeFormatter = { "5 minutes ago" },
         )
 
         assertTrue(report.contains("### HyperGesture Diagnostics"))
@@ -79,7 +80,42 @@ class DiagnosticReportTest {
         assertTrue(report.contains("- **Recovery Enabled:** true"))
         assertTrue(report.contains("- **Recovery Status:** VERIFIED"))
         assertTrue(report.contains("- **Last Trigger:** RESUME"))
-        assertTrue(report.contains("- **Last Attempt:**"))
-        assertTrue(report.contains("[2026-11-04 12:00:00] test-failure"))
+        assertTrue(report.contains("- **Last Attempt:** 5 minutes ago"))
+        assertTrue(report.contains("[2026-11-04 12:00:00] test-failure\nsomething went wrong"))
+        assertTrue(report.contains("````\n[2026-11-04 12:00:00] test-failure\nsomething went wrong\n````"))
+    }
+
+    @Test
+    fun `format with null or blank recorded failure prints None`() {
+        val diagnostics = Diagnostics(
+            androidRelease = "16",
+            appVersionName = "2.0.11",
+            hyperOsVersion = "OS3.0.1.0",
+            miuiVersion = null,
+            manufacturer = "Xiaomi",
+            model = "Redmi 14",
+            sdkInt = 36,
+            navigationMode = NavigationMode.GESTURAL,
+            accessibilityServiceEnabled = true,
+            accessibilityServiceSwitchedOn = true,
+            accessibilityServiceRunning = true,
+            overlaysInstalled = true,
+            overlaysInteractive = true,
+            navigationIntegrationId = "HyperOS",
+            navigationIntegrationAvailable = true,
+            lastGlobalActionFailure = null,
+            lastAppSwitchFailure = null,
+            lastCircleToSearchFailure = null,
+            lastRecordedFailure = null,
+        )
+        val recoveryState = RecoveryState()
+        val report = DiagnosticReport.format(
+            diagnostics = diagnostics,
+            recoveryState = recoveryState,
+            usageAccess = false,
+            assistant = Assistant.UNKNOWN,
+            batteryUnrestricted = false,
+        )
+        assertTrue(report.contains("#### Recorded Failure Log\nNone"))
     }
 }
