@@ -437,6 +437,49 @@ class GestureTrackerTest {
     }
 
     @Test
+    fun `a sideways sample that turns upward fires Home, not a switch`() {
+        val t = switchingTracker()
+        t.onDown(sample(540f, 2395f, 0L))
+        // 35px sideways with almost no upward travel arms PreviousApp first.
+        val armedSideways = t.onMove(sample(575f, 2390f, 50L))
+        assertTrue(armedSideways is TrackerAction.Armed)
+        assertEquals(null, (armedSideways as TrackerAction.Armed).scheduleHoldMs)
+        // The finger then carries on straight up, which re-arms Home with its hold.
+        val armedUp = t.onMove(sample(540f, 2195f, 90L))
+        assertTrue("expected re-arming, got $armedUp", armedUp is TrackerAction.Armed)
+        assertEquals(100L, (armedUp as TrackerAction.Armed).scheduleHoldMs)
+        assertEquals(
+            TrackerAction.Fire(GestureAction.Home, ScreenEdge.BOTTOM),
+            t.onUp(sample(540f, 2195f, 110L)),
+        )
+    }
+
+    @Test
+    fun `a sideways arm released above the edge fires Home`() {
+        val t = switchingTracker()
+        t.onDown(sample(540f, 2395f, 0L))
+        // One sideways MOVE and then straight up: no MOVE re-arms Home, so the release must.
+        assertTrue(t.onMove(sample(580f, 2390f, 50L)) is TrackerAction.Armed)
+        assertEquals(
+            TrackerAction.Fire(GestureAction.Home, ScreenEdge.BOTTOM),
+            t.onUp(sample(540f, 2095f, 80L)),
+        )
+    }
+
+    @Test
+    fun `a sideways swipe that stays sideways-dominant still switches`() {
+        val t = switchingTracker()
+        t.onDown(sample(300f, 2395f, 0L))
+        assertTrue(t.onMove(sample(500f, 2395f, 60L)) is TrackerAction.Armed)
+        // 400px sideways and only 95px up is still inside the sideways cone.
+        assertEquals(TrackerAction.None, t.onMove(sample(700f, 2300f, 90L)))
+        assertEquals(
+            TrackerAction.Fire(GestureAction.PreviousApp, ScreenEdge.BOTTOM),
+            t.onUp(sample(700f, 2300f, 110L)),
+        )
+    }
+
+    @Test
     fun `with app switching off a sideways swipe stays unused`() {
         val t = tracker(ScreenEdge.BOTTOM)
         t.onDown(sample(300f, 2395f, 0L))

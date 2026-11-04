@@ -37,16 +37,25 @@ private val Context.gestureDataStore: DataStore<Preferences> by
     preferencesDataStore(name = "gesture_configuration")
 
 /** Defaults are never duplicated here: a missing key falls back to [GestureConfiguration]. */
-class GestureSettingsRepository(private val context: Context) {
+class GestureSettingsRepository internal constructor(
+    private val dataStore: DataStore<Preferences>,
+    private val debugAppSwitch: () -> Boolean? = { null },
+    private val debugRecentsHold: () -> Long? = { null },
+) {
+    constructor(context: Context) : this(
+        dataStore = context.gestureDataStore,
+        debugAppSwitch = { debugAppSwitchEnabled(context) },
+        debugRecentsHold = { debugRecentsHoldMs(context) },
+    )
 
     val configuration: Flow<GestureConfiguration> =
-        context.gestureDataStore.data.map(::toConfiguration)
+        dataStore.data.map(::toConfiguration)
 
     suspend fun read(): GestureConfiguration = configuration.first()
 
     suspend fun update(transform: (GestureConfiguration) -> GestureConfiguration) {
         val updated = transform(read())
-        context.gestureDataStore.edit { preferences ->
+        dataStore.edit { preferences ->
             preferences[ENABLED] = updated.enabled
             preferences[EDGE_WIDTH_DP] = updated.edgeWidthDp
             preferences[SIDE_MIN_DISTANCE_DP] = updated.sideMinimumSwipeDistanceDp
@@ -78,11 +87,11 @@ class GestureSettingsRepository(private val context: Context) {
                 preferences[BOTTOM_MIN_DISTANCE_DP] ?: defaults.bottomMinimumSwipeDistanceDp,
             maximumArmDurationMs =
                 preferences[MAX_ARM_DURATION_MS] ?: defaults.maximumArmDurationMs,
-            recentsHoldMs = debugRecentsHoldMs() ?: storedHoldMs,
+            recentsHoldMs = debugRecentsHold() ?: storedHoldMs,
             holdStillnessDp = preferences[HOLD_STILLNESS_DP] ?: defaults.holdStillnessDp,
             offAxisToleranceRatio =
                 preferences[OFF_AXIS_TOLERANCE] ?: defaults.offAxisToleranceRatio,
-            appSwitchEnabled = debugAppSwitchEnabled() ?: (preferences[APP_SWITCH] ?: defaults.appSwitchEnabled),
+            appSwitchEnabled = debugAppSwitch() ?: (preferences[APP_SWITCH] ?: defaults.appSwitchEnabled),
             leftEdgeBackEnabled = preferences[LEFT_EDGE_BACK] ?: defaults.leftEdgeBackEnabled,
             rightEdgeBackEnabled = preferences[RIGHT_EDGE_BACK] ?: defaults.rightEdgeBackEnabled,
             hapticFeedbackEnabled = preferences[HAPTIC_FEEDBACK] ?: defaults.hapticFeedbackEnabled,
@@ -97,31 +106,36 @@ class GestureSettingsRepository(private val context: Context) {
         )
     }
 
-    /** Test seam that spares the debug emulator run a tap on the toggle. Debug only. */
-    private fun debugAppSwitchEnabled(): Boolean? {
-        if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
-        return runCatching {
-            Settings.Global.getString(context.contentResolver, APP_SWITCH_OVERRIDE)?.let {
-                it == "1" || it.equals("true", ignoreCase = true)
-            }
-        }.getOrNull()
-    }
-
-    /**
-     * Test seam for the emulator suite, which cannot deliver a gap-free touch stream: on a
-     * loaded machine input stalls past the hold window and a continuous swipe is read as a
-     * hold. Only consulted in a debuggable build, so a release APK never reaches it.
-     */
-    private fun debugRecentsHoldMs(): Long? {
-        if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
-        return runCatching {
-            Settings.Global.getString(context.contentResolver, RECENTS_HOLD_OVERRIDE)?.toLong()
-        }.getOrNull()
-    }
-
     private companion object {
         const val RECENTS_HOLD_OVERRIDE = "hypergesture_recents_hold_ms"
         const val APP_SWITCH_OVERRIDE = "hypergesture_app_switch"
+
+        /**
+         * Test seam that spares the debug emulator run a tap on the toggle. Debug only.
+         * The FLAG_DEBUGGABLE gate ensures release builds never query Settings.Global.
+         * Exercised in emulator/device E2E suites; on JVM tests, simulated via the functional seam.
+         */
+        private fun debugAppSwitchEnabled(context: Context): Boolean? {
+            if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
+            return runCatching {
+                Settings.Global.getString(context.contentResolver, APP_SWITCH_OVERRIDE)?.let {
+                    it == "1" || it.equals("true", ignoreCase = true)
+                }
+            }.getOrNull()
+        }
+
+        /**
+         * Test seam for the emulator suite, which cannot deliver a gap-free touch stream: on a
+         * loaded machine input stalls past the hold window and a continuous swipe is read as a
+         * hold. Only consulted in a debuggable build, so a release APK never reaches it.
+         * Exercised in emulator/device E2E suites; on JVM tests, simulated via the functional seam.
+         */
+        private fun debugRecentsHoldMs(context: Context): Long? {
+            if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return null
+            return runCatching {
+                Settings.Global.getString(context.contentResolver, RECENTS_HOLD_OVERRIDE)?.toLong()
+            }.getOrNull()
+        }
 
         val ENABLED = booleanPreferencesKey("gestures_enabled")
         val EDGE_WIDTH_DP = floatPreferencesKey("edge_width_dp")
