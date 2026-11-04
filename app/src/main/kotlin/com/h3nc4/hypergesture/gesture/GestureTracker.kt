@@ -140,7 +140,18 @@ class GestureTracker(
 
     private fun whileArmed(origin: TouchSample, state: Arm, sample: TouchSample): TrackerAction {
         if (holdAction == null) return followSide(origin, state, sample)
-        // A fired hold owns the release, and a sideways arm is already decided.
+        if (state is Arm.Sideways) {
+            // Symmetric with the Holding case below: one sideways sample must not lock the
+            // gesture in, or an upward swipe whose first sample drifted sideways (a loaded
+            // emulator delivers that reliably) fires PreviousApp instead of Home. Once the
+            // finger is travelling up instead, arm Home again and restart its hold.
+            if (sidewaysAction(origin, sample) != null || !hasArmed(origin, sample)) {
+                return TrackerAction.None
+            }
+            arm = Arm.Holding(sample)
+            return TrackerAction.Armed(scheduleHoldMs = configuration.recentsHoldMs)
+        }
+        // Only a fired hold remains: it owns the release.
         if (state !is Arm.Holding) return TrackerAction.None
         // An upward drift can arm Home before the sideways travel accumulates, so a gesture
         // may still become a sideways one until the hold fires.
@@ -208,6 +219,13 @@ class GestureTracker(
             // The release point decides, so a swipe brought back to the edge in one batched
             // event reverts as surely as one that disarmed on the way.
             if (holdAction == null && !isPastTrigger(origin, sample)) return TrackerAction.Reverted
+            // Released above the edge after a sideways sample: a DOWN, one sideways MOVE and
+            // then UP delivers no upward MOVE to re-arm Home, so the release itself must.
+            if (state is Arm.Sideways && sidewaysAction(origin, sample) == null &&
+                hasArmed(origin, sample)
+            ) {
+                return TrackerAction.Fire(shortAction, edge)
+            }
             return TrackerAction.Fire((state as? Arm.Sideways)?.action ?: shortAction, edge)
         }
 

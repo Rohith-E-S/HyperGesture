@@ -119,6 +119,10 @@ wait_for_stream_release
 
 echo >&2
 echo "== an upward swipe from the handle is still Home ==" >&2
+# The only case here the 1000 ms arm window can kill outright: a loaded emulator
+# stretches one swipe past it (seen as TOO_SLOW_TO_ARM, then a replay). Spend a
+# throwaway swipe first, as at the top of the suite, so this one is not its first.
+warm_input
 open_test_app
 reset_log
 swipe $((WIDTH / 2)) "${BOTTOM_Y}" $((WIDTH / 2)) $((HEIGHT - 600)) 120
