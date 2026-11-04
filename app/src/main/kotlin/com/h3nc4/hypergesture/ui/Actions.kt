@@ -81,6 +81,19 @@ internal fun openAssistantSettings(context: Context) = context.startFirst(
     Intent(Settings.ACTION_SETTINGS),
 )
 
+internal const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
+
+internal fun isShizukuInstalled(context: Context): Boolean = runCatching {
+    context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0) != null
+}.getOrDefault(false)
+
+internal fun openShizuku(context: Context) {
+    val intent = context.packageManager.getLaunchIntentForPackage(SHIZUKU_PACKAGE)
+    if (intent != null) {
+        context.startFirst(intent)
+    }
+}
+
 private const val MIUI_AUTOSTART_ACTION = "miui.intent.action.OP_AUTO_START"
 
 /** Android 13's one-tap prompt. Every answer, a refusal included, reaches the caller. */

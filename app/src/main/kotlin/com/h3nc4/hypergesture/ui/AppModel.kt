@@ -32,8 +32,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.h3nc4.hypergesture.R
+import com.h3nc4.hypergesture.diagnostics.DiagnosticReport
 import com.h3nc4.hypergesture.diagnostics.Diagnostics
 import com.h3nc4.hypergesture.diagnostics.DiagnosticsCollector
+import com.h3nc4.hypergesture.diagnostics.FailureLog
 import com.h3nc4.hypergesture.diagnostics.ServiceStatus
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
 import com.h3nc4.hypergesture.gesture.withGestureDefaults
@@ -126,13 +129,29 @@ internal class AppModel(
         scope.launch {
             snackbar.showSnackbar(
                 if (ok) {
-                    context.getString(com.h3nc4.hypergesture.R.string.snackbar_overlays_restarted)
+                    context.getString(R.string.snackbar_overlays_restarted)
                 } else {
-                    context.getString(com.h3nc4.hypergesture.R.string.snackbar_service_not_running)
+                    context.getString(R.string.snackbar_service_not_running)
                 },
             )
         }
     }
+
+    fun clearFailureLog() {
+        FailureLog.clear(context)
+        refresh()
+        scope.launch {
+            snackbar.showSnackbar(context.getString(R.string.snackbar_failure_log_cleared))
+        }
+    }
+
+    fun generateDiagnosticReport(): String = DiagnosticReport.format(
+        diagnostics = diagnostics,
+        recoveryState = recoveryState,
+        usageAccess = usageAccess,
+        assistant = assistant,
+        batteryUnrestricted = batteryUnrestricted,
+    )
 
     fun update(transform: (GestureConfiguration) -> GestureConfiguration) {
         scope.launch { settings.update(transform) }

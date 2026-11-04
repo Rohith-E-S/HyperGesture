@@ -22,6 +22,7 @@ import android.accessibilityservice.AccessibilityService
 import android.util.Log
 import android.widget.Toast
 import com.h3nc4.hypergesture.R
+import com.h3nc4.hypergesture.diagnostics.FailureLog
 import com.h3nc4.hypergesture.gesture.GestureAction
 import com.h3nc4.hypergesture.navigation.NavigationIntegration
 
@@ -56,13 +57,17 @@ class GestureActionPerformer(private val service: AccessibilityService) {
         // unbound; uncaught that kills the process and flags the service "malfunctioning".
         val performed = runCatching { service.performGlobalAction(globalAction) }
             .getOrElse { throwable ->
-                lastFailure = "${action.id}: performGlobalAction threw ${throwable.javaClass.name}"
+                val message = "${action.id}: performGlobalAction threw ${throwable.javaClass.name}"
+                lastFailure = message
+                FailureLog.record(service, "global action", throwable, message)
                 Log.w(TAG, "performGlobalAction(${action.id}) threw", throwable)
                 return false
             }
         if (!performed) {
             // No retry: a repeated global action can double-navigate.
-            lastFailure = "${action.id}: performGlobalAction returned false"
+            val message = "${action.id}: performGlobalAction returned false"
+            lastFailure = message
+            FailureLog.record(service, "global action", message = message)
             Log.w(TAG, "performGlobalAction(${action.id}) returned false")
         }
         return performed
@@ -72,6 +77,7 @@ class GestureActionPerformer(private val service: AccessibilityService) {
     private fun circleToSearch(): Boolean {
         val problem = CircleToSearchLauncher.launch(service, assistantTag) ?: return true
         lastCircleToSearchFailure = problem
+        FailureLog.record(service, "circle to search", message = problem)
         Log.w(TAG, "CIRCLE_TO_SEARCH_FAILED $problem")
         runCatching {
             Toast.makeText(service, R.string.toast_circle_to_search_failed, Toast.LENGTH_LONG)

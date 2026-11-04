@@ -32,6 +32,7 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import com.h3nc4.hypergesture.diagnostics.FailureLog
 import com.h3nc4.hypergesture.gesture.ConfirmVerdict
 import com.h3nc4.hypergesture.gesture.GestureAction
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
@@ -75,7 +76,9 @@ internal class EdgeTouchOverlay(
 
     private val streamWatchdog = Runnable {
         if (streamHeld) {
-            Log.w(TAG, "Stream held timed out after ${STREAM_WATCHDOG_TIMEOUT_MS}ms, forcing release")
+            val message = "Stream held timed out after ${STREAM_WATCHDOG_TIMEOUT_MS}ms, forcing release"
+            Log.w(TAG, message)
+            FailureLog.record(context, "touch stream watchdog", message = message)
             releaseStream()
         }
     }
@@ -168,7 +171,10 @@ internal class EdgeTouchOverlay(
                         listOf(Rect(0, 0, view.width, view.height))
                 }
             }
-        }.onFailure { Log.e(TAG, "Could not add $edge strip", it) }
+        }.onFailure {
+            Log.e(TAG, "Could not add $edge strip", it)
+            FailureLog.record(context, "add $edge strip", it)
+        }
     }
 
     private fun paramsFor(

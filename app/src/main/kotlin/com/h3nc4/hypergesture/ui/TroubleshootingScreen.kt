@@ -17,6 +17,11 @@
 
 package com.h3nc4.hypergesture.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -24,6 +29,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -31,18 +37,83 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.diagnostics.Diagnostics
+import com.h3nc4.hypergesture.diagnostics.ServiceStatus
 import com.h3nc4.hypergesture.navigation.GenericAndroidNavigationIntegration
 import com.h3nc4.hypergesture.navigation.HyperOSNavigationIntegration
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.RecoveryState
 import com.h3nc4.hypergesture.navigation.RecoveryStatus
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun TroubleshootingScreen(model: AppModel) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val copiedMessage = stringResource(R.string.snackbar_report_copied)
     LaunchedEffect(Unit) { model.refresh() }
     val diagnostics = model.diagnostics
+    val recovery = model.recoveryState
+
     SectionHeader(stringResource(R.string.section_known_fixes))
+
+    // Dynamic contextual recommendations based on current system and error state
+    if (diagnostics.serviceStatus == ServiceStatus.STOPPED) {
+        InfoRow(
+            title = stringResource(R.string.fix_service_stopped_title),
+            supporting = stringResource(R.string.fix_service_stopped_body),
+            actions = {
+                OutlinedButton(onClick = { openAccessibility(context) }) {
+                    Text(stringResource(R.string.action_open))
+                }
+            },
+        )
+    }
+    if (!model.usageAccess && diagnostics.lastAppSwitchFailure != null) {
+        InfoRow(
+            title = stringResource(R.string.fix_usage_access_title),
+            supporting = stringResource(R.string.fix_usage_access_body),
+            actions = {
+                OutlinedButton(onClick = { openUsageAccess(context) }) {
+                    Text(stringResource(R.string.action_open))
+                }
+            },
+        )
+    }
+    if (diagnostics.lastCircleToSearchFailure != null) {
+        InfoRow(
+            title = stringResource(R.string.fix_assistant_title),
+            supporting = stringResource(R.string.fix_assistant_body),
+            actions = {
+                OutlinedButton(onClick = { openAssistantSettings(context) }) {
+                    Text(stringResource(R.string.action_open))
+                }
+            },
+        )
+    }
+    if (recovery.enabled && recovery.status == RecoveryStatus.PERMISSION_DENIED) {
+        InfoRow(
+            title = stringResource(R.string.fix_shizuku_permission_title),
+            supporting = stringResource(R.string.fix_shizuku_permission_body),
+            actions = {
+                OutlinedButton(onClick = model::requestShizukuPermission) {
+                    Text(stringResource(R.string.action_grant))
+                }
+            },
+        )
+    }
+    if (recovery.enabled && recovery.status == RecoveryStatus.SHIZUKU_UNAVAILABLE && isShizukuInstalled(context)) {
+        InfoRow(
+            title = stringResource(R.string.fix_shizuku_unavailable_title),
+            supporting = stringResource(R.string.fix_shizuku_unavailable_body),
+            actions = {
+                OutlinedButton(onClick = { openShizuku(context) }) {
+                    Text(stringResource(R.string.action_open_shizuku))
+                }
+            },
+        )
+    }
+
+    // Standard fixes always available as reference
     InfoRow(
         title = stringResource(R.string.fix_restart_overlays_title),
         supporting = stringResource(R.string.fix_restart_overlays_body),
@@ -95,7 +166,17 @@ internal fun TroubleshootingScreen(model: AppModel) {
         valueTag = TestTags.DIAG_CIRCLE_TO_SEARCH_FAILURE,
     )
     diagnostics.lastRecordedFailure?.let { failure ->
-        InfoRow(title = stringResource(R.string.diag_recorded_failure))
+        InfoRow(
+            title = stringResource(R.string.diag_recorded_failure),
+            actions = {
+                OutlinedButton(
+                    onClick = model::clearFailureLog,
+                    modifier = Modifier.tagged(TestTags.ACTION_CLEAR_FAILURES),
+                ) {
+                    Text(stringResource(R.string.action_clear_failures))
+                }
+            },
+        )
         Text(
             text = failure.take(MAX_FAILURE_CHARS),
             style = MaterialTheme.typography.bodySmall,
@@ -103,8 +184,27 @@ internal fun TroubleshootingScreen(model: AppModel) {
             modifier = Modifier.padding(horizontal = 16.dp),
         )
     }
-    TextButton(onClick = model::refresh, modifier = Modifier.padding(horizontal = 4.dp)) {
-        Text(stringResource(R.string.action_refresh_diagnostics))
+
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        OutlinedButton(
+            onClick = {
+                val report = model.generateDiagnosticReport()
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                clipboard?.setPrimaryClip(ClipData.newPlainText("HyperGesture Diagnostics", report))
+                scope.launch {
+                    model.snackbar.showSnackbar(copiedMessage)
+                }
+            },
+            modifier = Modifier.tagged(TestTags.ACTION_COPY_REPORT),
+        ) {
+            Text(stringResource(R.string.action_copy_report))
+        }
+        TextButton(onClick = model::refresh) {
+            Text(stringResource(R.string.action_refresh_diagnostics))
+        }
     }
     FootNote(stringResource(R.string.diag_local_only))
 }
@@ -164,4 +264,4 @@ private fun integrationLabel(id: String): String = when (id) {
     else -> id
 }
 
-private const val MAX_FAILURE_CHARS = 1200
+private const val MAX_FAILURE_CHARS = 3000

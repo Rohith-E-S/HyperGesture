@@ -26,6 +26,7 @@ import android.content.pm.PackageManager
 import android.os.Process
 import android.os.SystemClock
 import android.util.Log
+import com.h3nc4.hypergesture.diagnostics.FailureLog
 
 /**
  * Walks the apps the user came from, which Android exposes to nobody: there is no global
@@ -115,7 +116,9 @@ internal class AppSwitcher(
         val launchedAt = System.currentTimeMillis()
         return runCatching { context.startActivity(intent) }
             .onFailure { throwable ->
-                lastFailure = "app switch: starting $target threw ${throwable.javaClass.name}"
+                val message = "app switch: starting $target threw ${throwable.javaClass.name}"
+                lastFailure = message
+                FailureLog.record(context, "app switcher", throwable, message)
                 Log.w(TAG, "startActivity($target) threw", throwable)
             }
             .onSuccess {
