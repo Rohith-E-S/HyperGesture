@@ -30,10 +30,11 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.diagnostics.DiagnosticReport
 import com.h3nc4.hypergesture.diagnostics.Diagnostics
@@ -63,6 +64,8 @@ import com.h3nc4.hypergesture.setup.SetupStateRepository
 import com.h3nc4.hypergesture.setup.setupState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -116,7 +119,7 @@ internal class AppModel(
         )
 
     fun refresh() {
-        diagnostics = DiagnosticsCollector.collect(context)
+        scope.launch(Dispatchers.IO) { diagnostics = DiagnosticsCollector.collect(context) }
         usageAccess = hasUsageAccess(context)
         assistant = readAssistant(context)
         batteryUnrestricted = batteryUnrestricted(context)
@@ -245,16 +248,22 @@ internal class AppModel(
 private const val STOP_GRACE_MS = 3_000L
 internal const val SHIZUKU_PERMISSION_REQUEST = 8107
 
+/** Keeps the write scope across rotation; only cleared when the activity finishes. */
+internal class AppModelHost : ViewModel() {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    override fun onCleared() = scope.cancel()
+}
+
 @Composable
 internal fun rememberAppModel(): AppModel {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    val host: AppModelHost = viewModel()
     val model = remember {
         AppModel(
             context.applicationContext,
             GestureSettingsRepository(context.applicationContext),
             context.applicationContext.setupState,
-            scope,
+            host.scope,
         )
     }
     LaunchedEffect(model) { model.observe() }
