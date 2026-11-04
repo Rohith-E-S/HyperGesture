@@ -142,7 +142,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         // twice would double-register every listener, observer, receiver and collector.
         if (overlay != null) return
         settings = GestureSettingsRepository(applicationContext)
-        performer = GestureActionPerformer(this)
+        performer = GestureActionPerformer(this) { configuration.appSwitchEnabled }
         windowManager = getSystemService(WindowManager::class.java)
         overlay = EdgeTouchOverlay(
             context = this,
@@ -272,6 +272,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         navigationObserver = null
         triggerReceivers.forEach { runCatching { unregisterReceiver(it) } }
         triggerReceivers = emptyList()
+        if (::performer.isInitialized) runCatching { performer.dispose() }
         overlay?.remove()
         overlay = null
         handler.removeCallbacksAndMessages(null)

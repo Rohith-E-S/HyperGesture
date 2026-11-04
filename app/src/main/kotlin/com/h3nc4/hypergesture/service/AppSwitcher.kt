@@ -108,15 +108,27 @@ internal class AppSwitcher(
     /** A snapshot of the walk with the app that was in front when it was read. */
     private data class Walk(val apps: List<String>, val currentIndex: Int)
 
-    // The walk is precomputed in prefetchTasks on Dispatchers.IO, so firing only reads
-    // the cached order: no usage query runs on the caller's thread.
+    // The walk is precomputed in prefetchTasks on Dispatchers.IO, so firing normally
+    // only reads the cached order. The rare cold path (first swipe, before prefetch
+    // finished) builds synchronously and proceeds instead of failing as not granted.
     fun step(toPrevious: Boolean): Boolean {
         if (!isAppSwitchEnabled()) return false
-        val (currentWalk, currentPosition) = synchronized(this) { walk to position }
+        val cached = synchronized(this) { walk to position }
+        val currentWalk: List<String>
+        val currentPosition: Int
+        if (cached.first.isEmpty()) {
+            val built = buildWalk()
+            synchronized(this) {
+                walk = built.apps
+                position = built.currentIndex
+            }
+            currentWalk = built.apps
+            currentPosition = built.currentIndex
+        } else {
+            currentWalk = cached.first
+            currentPosition = cached.second
+        }
         if (currentWalk.isEmpty()) {
-            // Nothing precomputed yet (first swipe, or prefetch not finished): arm the
-            // background build for the next swipe instead of querying here.
-            prefetchTasks()
             val message = "app switch: no usage events, so usage access is probably not granted"
             lastFailure = message
             Log.w(TAG, message)
@@ -308,11 +320,13 @@ internal class AppSwitcher(
      * another app the system was running over. [SYSTEM_SURFACES] covers the cases even
      * that lets past.
      */
-    private fun isPrivileged(packageName: String): Boolean = privileged.getOrPut(packageName) {
-        runCatching {
-            context.packageManager.getApplicationInfo(packageName, 0).uid <
-                Process.FIRST_APPLICATION_UID
-        }.getOrDefault(false)
+    private fun isPrivileged(packageName: String): Boolean = synchronized(privileged) {
+        privileged.getOrPut(packageName) {
+            runCatching {
+                context.packageManager.getApplicationInfo(packageName, 0).uid <
+                    Process.FIRST_APPLICATION_UID
+            }.getOrDefault(false)
+        }
     }
 
     /** Every activity that can act as home, including launchers that also run as apps. */
