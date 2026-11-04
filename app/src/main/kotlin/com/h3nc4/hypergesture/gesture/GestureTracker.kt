@@ -115,15 +115,25 @@ class GestureTracker(
 
     fun onMove(sample: TouchSample): TrackerAction {
         val origin = tracked ?: return TrackerAction.None
-        if (longPressPending && strayedBeyondSlop(origin, sample)) longPressPending = false
+        val longPressWasPending = longPressPending
         val state = arm
-        return if (state == null) whileArming(origin, sample) else whileArmed(origin, state, sample)
+        val action = if (state == null) {
+            whileArming(origin, sample, longPressWasPending)
+        } else {
+            whileArmed(origin, state, sample)
+        }
+        if (longPressPending && strayedBeyondSlop(origin, sample)) longPressPending = false
+        return action
     }
 
-    private fun whileArming(origin: TouchSample, sample: TouchSample): TrackerAction {
+    private fun whileArming(
+        origin: TouchSample,
+        sample: TouchSample,
+        longPressWasPending: Boolean,
+    ): TrackerAction {
         // A pending long press holds the arm window open, or a system touch and hold delay
         // of 1000 or 1500 ms would be cut off by it and never fire.
-        if (!longPressPending &&
+        if (!longPressWasPending &&
             sample.timestampMs - origin.timestampMs > configuration.maximumArmDurationMs
         ) {
             tracked = null

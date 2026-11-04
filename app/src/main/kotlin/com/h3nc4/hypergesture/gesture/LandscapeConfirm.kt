@@ -67,7 +67,10 @@ class LandscapeConfirm(private val windowMs: Long = ConfirmPill.WINDOW_MS) {
     }
 
     fun onFire(action: GestureAction, edge: ScreenEdge, nowMs: Long): ConfirmVerdict {
-        if (edge != ScreenEdge.BOTTOM || action !in GUARDED) return ConfirmVerdict.Perform
+        if (edge != ScreenEdge.BOTTOM || action !in GUARDED) {
+            dismiss()
+            return ConfirmVerdict.Perform
+        }
         if (!required || confirming) {
             dismiss()
             return ConfirmVerdict.Perform
