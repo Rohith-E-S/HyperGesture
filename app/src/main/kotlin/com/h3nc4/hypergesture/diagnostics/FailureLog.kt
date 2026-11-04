@@ -21,6 +21,9 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.concurrent.Executors
 
 /**
  * Logcat cannot be trusted on the target ROM: its global `log.tag` threshold drops debug
@@ -32,30 +35,103 @@ object FailureLog {
 
     private const val TAG = "HyperGesture"
     private const val FILE_NAME = "last_failure.txt"
-    private const val MAX_BYTES = 16 * 1024
+    private const val MAX_CHARS = 16 * 1024
+    private const val TRUNCATED_MARKER = "\n... [truncated]"
 
-    fun record(context: Context, label: String, throwable: Throwable) {
-        Log.e(TAG, "FAILURE [$label]", throwable)
-        val text = buildString {
-            appendLine("label: $label")
-            appendLine("device: ${Build.MANUFACTURER} ${Build.MODEL}")
-            appendLine("android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
-            appendLine("---")
-            append(throwable.stackTraceToString())
-        }
-        runCatching {
-            file(context).writeText(text.take(MAX_BYTES))
-        }.onFailure { Log.e(TAG, "Could not persist the failure record", it) }
+    private val ioExecutor = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "hypergesture-failure-log").apply { isDaemon = true }
     }
 
+    fun record(
+        context: Context,
+        label: String,
+        throwable: Throwable? = null,
+        message: String? = null,
+        timestamp: String = currentTimestamp(),
+    ) {
+        if (throwable != null) {
+            Log.e(TAG, "FAILURE [$label] ${message.orEmpty()}", throwable)
+        } else {
+            Log.w(TAG, "FAILURE [$label] ${message.orEmpty()}")
+        }
+        val entry = formatEntry(
+            label = label,
+            throwable = throwable,
+            message = message,
+            manufacturer = Build.MANUFACTURER,
+            model = Build.MODEL,
+            release = Build.VERSION.RELEASE,
+            sdkInt = Build.VERSION.SDK_INT,
+            timestamp = timestamp,
+        )
+        val appContext = context.applicationContext ?: context
+        ioExecutor.execute {
+            synchronized(this) {
+                runCatching {
+                    val target = file(appContext)
+                    val existing = if (target.exists()) target.readText().trim() else null
+                    val combined = combineEntries(entry, existing, MAX_CHARS)
+                    target.writeText(combined)
+                }.onFailure { Log.e(TAG, "Could not persist the failure record", it) }
+            }
+        }
+    }
+
+    @Synchronized
     fun read(context: Context): String? = runCatching {
         val file = file(context)
         if (file.exists()) file.readText().ifBlank { null } else null
     }.getOrNull()
 
+    @Synchronized
     fun clear(context: Context) {
         runCatching { file(context).delete() }
     }
+
+    internal fun formatEntry(
+        label: String,
+        throwable: Throwable? = null,
+        message: String? = null,
+        manufacturer: String? = null,
+        model: String? = null,
+        release: String? = null,
+        sdkInt: Int = 0,
+        timestamp: String = currentTimestamp(),
+    ): String = buildString {
+        appendLine("[$timestamp] $label")
+        val devInfo = listOfNotNull(manufacturer, model).joinToString(" ").ifBlank { null }
+        val osInfo = when {
+            release != null && sdkInt > 0 -> "Android $release (API $sdkInt)"
+            release != null -> "Android $release"
+            sdkInt > 0 -> "API $sdkInt"
+            else -> null
+        }
+        val meta = listOfNotNull(devInfo?.let { "device: $it" }, osInfo).joinToString(" | ")
+        if (meta.isNotBlank()) {
+            appendLine(meta)
+        }
+        if (!message.isNullOrBlank()) {
+            appendLine("message: $message")
+        }
+        if (throwable != null) {
+            appendLine("---")
+            append(throwable.stackTraceToString().trimEnd())
+        }
+    }.trimEnd()
+
+    internal fun combineEntries(newEntry: String, existing: String?, maxChars: Int = MAX_CHARS): String {
+        val base = if (existing.isNullOrBlank()) {
+            newEntry
+        } else {
+            "$newEntry\n\n========================================\n\n$existing"
+        }
+        if (base.length <= maxChars) return base
+        val takeLen = (maxChars - TRUNCATED_MARKER.length).coerceAtLeast(0)
+        return "${base.take(takeLen)}$TRUNCATED_MARKER"
+    }
+
+    internal fun currentTimestamp(): String =
+        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
 }

@@ -17,6 +17,8 @@
 
 package com.h3nc4.hypergesture.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -32,8 +34,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import com.h3nc4.hypergesture.R
+import com.h3nc4.hypergesture.diagnostics.DiagnosticReport
 import com.h3nc4.hypergesture.diagnostics.Diagnostics
 import com.h3nc4.hypergesture.diagnostics.DiagnosticsCollector
+import com.h3nc4.hypergesture.diagnostics.FailureLog
 import com.h3nc4.hypergesture.diagnostics.ServiceStatus
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
 import com.h3nc4.hypergesture.gesture.withGestureDefaults
@@ -46,6 +51,8 @@ import com.h3nc4.hypergesture.navigation.applyGesturesEnabled
 import com.h3nc4.hypergesture.setup.AccessibilityAlert
 import com.h3nc4.hypergesture.setup.GestureTileService
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
+import com.h3nc4.hypergesture.service.AppSwitcher
+import com.h3nc4.hypergesture.service.GestureActionPerformer
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
 import com.h3nc4.hypergesture.setup.SetupChecklist
@@ -126,13 +133,40 @@ internal class AppModel(
         scope.launch {
             snackbar.showSnackbar(
                 if (ok) {
-                    context.getString(com.h3nc4.hypergesture.R.string.snackbar_overlays_restarted)
+                    context.getString(R.string.snackbar_overlays_restarted)
                 } else {
-                    context.getString(com.h3nc4.hypergesture.R.string.snackbar_service_not_running)
+                    context.getString(R.string.snackbar_service_not_running)
                 },
             )
         }
     }
+
+    fun clearFailureLog() {
+        FailureLog.clear(context)
+        GestureActionPerformer.clearFailures()
+        AppSwitcher.clearFailure()
+        refresh()
+        scope.launch {
+            snackbar.showSnackbar(context.getString(R.string.snackbar_failure_log_cleared))
+        }
+    }
+
+    fun copyDiagnosticReport() {
+        val report = generateDiagnosticReport()
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        clipboard?.setPrimaryClip(ClipData.newPlainText("HyperGesture Diagnostics", report))
+        scope.launch {
+            snackbar.showSnackbar(context.getString(R.string.snackbar_report_copied))
+        }
+    }
+
+    fun generateDiagnosticReport(): String = DiagnosticReport.format(
+        diagnostics = diagnostics,
+        recoveryState = recoveryState,
+        usageAccess = usageAccess,
+        assistant = assistant,
+        batteryUnrestricted = batteryUnrestricted,
+    )
 
     fun update(transform: (GestureConfiguration) -> GestureConfiguration) {
         scope.launch { settings.update(transform) }

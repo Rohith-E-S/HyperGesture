@@ -73,7 +73,7 @@ object AccessibilityAlert {
             throw cancelled
         } catch (throwable: Throwable) {
             // An unreadable DataStore must not take down a boot receiver or the worker.
-            FailureLog.record(app, "accessibility alert", throwable)
+            FailureLog.record(app, "accessibility alert", throwable = throwable)
         }
     }
 
