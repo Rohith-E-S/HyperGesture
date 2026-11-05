@@ -40,8 +40,8 @@ fi
 
 apk="$(find app/build/outputs/apk/release -name '*.apk' ! -name '*unsigned*' | head -n 1)"
 if [ -z "${apk}" ]; then
-  apk="$(find app/build/outputs/apk/release -name '*.apk' | head -n 1)"
-  echo "No keystore password, so this APK is unsigned. Set KEYSTORE_PASSWORD in .env to sign it." >&2
+  echo "No signed APK found. Set KEYSTORE_PASSWORD in .env to sign it." >&2
+  exit 1
 fi
 cp "${apk}" hypergesture.apk
 
