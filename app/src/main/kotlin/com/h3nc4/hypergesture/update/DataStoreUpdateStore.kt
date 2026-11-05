@@ -21,13 +21,17 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
+import java.io.IOException
 
 internal class DataStoreUpdateStore(private val store: DataStore<Preferences>) : UpdateStore {
 
-    private suspend fun preferences() = store.data.first()
+    private suspend fun preferences() =
+        store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.first()
 
     override suspend fun enabled(): Boolean = preferences()[ENABLED] ?: false
 
