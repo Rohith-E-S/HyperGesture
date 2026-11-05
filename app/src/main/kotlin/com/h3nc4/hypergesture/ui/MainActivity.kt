@@ -19,9 +19,11 @@
 package com.h3nc4.hypergesture.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.service.quicksettings.TileService
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -69,13 +71,26 @@ import com.h3nc4.hypergesture.update.UpdateViewModel
 
 class MainActivity : ComponentActivity() {
 
+    private var homeResetNonce by mutableStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // Android 15 draws edge to edge anyway, and without this the status bar keeps white
         // icons on the light theme, so the clock and battery vanish.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        if (intent.action == TileService.ACTION_QS_TILE_PREFERENCES) {
+            homeResetNonce = 1
+        }
         setContent {
-            HyperGestureTheme { HyperGestureApp() }
+            HyperGestureTheme { HyperGestureApp(homeResetNonce) { homeResetNonce = 0 } }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == TileService.ACTION_QS_TILE_PREFERENCES) {
+            homeResetNonce++
         }
     }
 }
@@ -94,14 +109,16 @@ internal enum class Screen(@param:StringRes val title: Int) {
 
 private val BackStackSaver = Saver<List<Screen>, ArrayList<String>>(
     save = { stack -> ArrayList(stack.map { it.name }) },
-    restore = { names -> names.map(Screen::valueOf) },
+    restore = { names ->
+        val restored = names.mapNotNull { runCatching { Screen.valueOf(it) }.getOrNull() }
+        restored.ifEmpty { listOf(Screen.HOME) }
+    },
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HyperGestureApp() {
+private fun HyperGestureApp(homeResetNonce: Int, onHomeResetConsumed: () -> Unit) {
     val model = rememberAppModel()
-    RequestNotificationPermission(model.record.serviceEverEnabled)
     // Held here rather than in Updates. The daily check runs on app open and home reads its result.
     val updates: UpdateViewModel = viewModel()
     LifecycleResumeEffect(updates) {
@@ -109,6 +126,12 @@ private fun HyperGestureApp() {
         onPauseOrDispose {}
     }
     var stack by rememberSaveable(stateSaver = BackStackSaver) { mutableStateOf(listOf(Screen.HOME)) }
+    LaunchedEffect(homeResetNonce) {
+        if (homeResetNonce > 0) {
+            stack = listOf(Screen.HOME)
+            onHomeResetConsumed()
+        }
+    }
     val screen = stack.last()
     val back = { stack = stack.dropLast(1) }
     BackHandler(enabled = stack.size > 1, onBack = back)
@@ -147,8 +170,9 @@ private fun HyperGestureApp() {
                     .verticalScroll(rememberScrollState())
                     .padding(bottom = 16.dp),
             ) {
+                RequestNotificationPermission(model.record.serviceEverEnabled)
                 when (screen) {
-                    Screen.HOME -> HomeScreen(model, updates) { stack = stack + it }
+                    Screen.HOME -> HomeScreen(model, updates) { if (stack.last() != it) stack = stack + it }
                     Screen.SETUP -> SetupScreen(model)
                     Screen.APP_SWITCHING -> AppSwitchingScreen(model)
                     Screen.CIRCLE_TO_SEARCH -> CircleToSearchScreen(model)
@@ -171,7 +195,8 @@ private fun HyperGestureApp() {
 private fun RequestNotificationPermission(serviceEverEnabled: Boolean) {
     val context = LocalContext.current
     var asked by rememberSaveable { mutableStateOf(false) }
-    val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    var showRationale by rememberSaveable { mutableStateOf(false) }
+    val request = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { asked = true }
     LaunchedEffect(serviceEverEnabled, asked) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
         if (!serviceEverEnabled || asked) return@LaunchedEffect
@@ -183,9 +208,15 @@ private fun RequestNotificationPermission(serviceEverEnabled: Boolean) {
         val activity = context.findActivity() ?: return@LaunchedEffect
         // A refusal already answered here is not repeated; the system stops showing it anyway.
         if (activity.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+            showRationale = true
             return@LaunchedEffect
         }
-        asked = true
         request.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+    if (showRationale) {
+        Text(
+            text = stringResource(R.string.alert_gestures_off_body),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
     }
 }
