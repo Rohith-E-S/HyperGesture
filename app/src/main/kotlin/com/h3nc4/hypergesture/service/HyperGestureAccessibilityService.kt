@@ -58,11 +58,13 @@ import com.h3nc4.hypergesture.setup.setupState
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.hypot
 
@@ -80,8 +82,18 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     private val coroutineFailures = CoroutineExceptionHandler { _, throwable ->
         FailureLog.record(this, "settings collector", throwable = throwable)
     }
-    private val scope =
+    private var scope =
         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + coroutineFailures)
+
+    /**
+     * [teardown] cancels [scope]; an AccessibilityService instance can be rebound after
+     * unbind, so a cancelled scope must be replaced or the settings collector never restarts.
+     */
+    private fun recreateScopeIfCancelled() {
+        if (!scope.isActive) {
+            scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + coroutineFailures)
+        }
+    }
     private val handler = Handler(Looper.getMainLooper())
 
     private lateinit var settings: GestureSettingsRepository
@@ -118,6 +130,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         AccessibilityAlert.cancel(this)
         // Recorded here, not only from the UI, so a boot revoke still has proof the user
         // had gestures running and deserves the way back.
+        recreateScopeIfCancelled()
         scope.launch(Dispatchers.IO) {
             applicationContext.setupState.set(SetupFlag.SERVICE_EVER_ENABLED, true)
         }
@@ -141,30 +154,57 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         // onServiceConnected can fire again without an intervening teardown; setting up
         // twice would double-register every listener, observer, receiver and collector.
         if (overlay != null) return
+        // teardown cancels scope; same instance can be rebound, so replace it before
+        // launching the collector below or that launch would finish immediately.
+        recreateScopeIfCancelled()
         settings = GestureSettingsRepository(applicationContext)
         performer = GestureActionPerformer(this)
         windowManager = getSystemService(WindowManager::class.java)
-        overlay = EdgeTouchOverlay(
+        // Built into a local until every registration below succeeds: assigning to
+        // overlay early would leave overlay != null after a partial failure and block retry.
+        val newOverlay = EdgeTouchOverlay(
             context = this,
             windowManager = windowManager,
             replayer = this,
             onGestureAction = ::onGestureAction,
             onAppSwitchBegin = performer::prefetchAppSwitch,
         )
-        performer.prefetchAppSwitch()
+        var displayRegistered = false
+        var collector: Job? = null
+        try {
+            performer.prefetchAppSwitch()
 
-        (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
-            .registerDisplayListener(displayListener, handler)
+            (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
+                .registerDisplayListener(displayListener, handler)
+            displayRegistered = true
 
-        val recovery = NavigationRecoveryRuntime.runner(applicationContext)
-        navigationObserver = NavigationSettingsObserver(this, recovery, handler).also { it.register() }
-        triggerReceivers = registerTriggerReceivers(recovery)
+            val recovery = NavigationRecoveryRuntime.runner(applicationContext)
+            navigationObserver = NavigationSettingsObserver(this, recovery, handler).also { it.register() }
+            triggerReceivers = registerTriggerReceivers(recovery)
 
-        scope.launch {
-            settings.configuration.collect { updated ->
-                configuration = updated
-                installOverlay()
+            // Publish only after the registrations above succeeded, then collect settings.
+            overlay = newOverlay
+            collector = scope.launch {
+                settings.configuration.collect { updated ->
+                    configuration = updated
+                    installOverlay()
+                }
             }
+        } catch (t: Throwable) {
+            // Roll back partial registrations so a retry starts clean and never double-registers.
+            collector?.cancel()
+            if (displayRegistered) {
+                runCatching {
+                    (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
+                        .unregisterDisplayListener(displayListener)
+                }
+            }
+            navigationObserver?.unregister()
+            navigationObserver = null
+            triggerReceivers.forEach { runCatching { unregisterReceiver(it) } }
+            triggerReceivers = emptyList()
+            overlay = null
+            throw t
         }
     }
 
@@ -218,7 +258,13 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             // Without the scheme this filter matches none of the package intents.
             addDataScheme("package")
         }
-        ContextCompat.registerReceiver(this, packages, packageFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // If the second registration fails, undo the first or a retry would double-register it.
+        try {
+            ContextCompat.registerReceiver(this, packages, packageFilter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        } catch (t: Throwable) {
+            runCatching { unregisterReceiver(preferredHome) }
+            throw t
+        }
         return listOf(preferredHome, packages)
     }
 
