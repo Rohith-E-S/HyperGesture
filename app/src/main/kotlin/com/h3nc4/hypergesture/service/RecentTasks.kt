@@ -27,6 +27,8 @@ import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -44,12 +46,14 @@ import java.util.concurrent.atomic.AtomicBoolean
 internal class RecentTasksSource(
     private val shell: ShizukuShellRunner = ShizukuShellRunner(),
     private val gateway: ShizukuGateway = SystemShizukuGateway,
+    private val isAppSwitchEnabled: () -> Boolean = { true },
 ) {
 
     private val scope = CoroutineScope(
-        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, throwable ->
-            android.util.Log.w("HyperGesture", "Could not read the recents stack", throwable)
-        },
+        SupervisorJob() + Dispatchers.IO +
+            CoroutineExceptionHandler { _, throwable ->
+                android.util.Log.w("HyperGesture", "Could not read the recents stack", throwable)
+            },
     )
 
     @Volatile
@@ -68,9 +72,15 @@ internal class RecentTasksSource(
 
     /** Refreshes in the background; a call while one is still running is dropped. */
     fun refresh() {
+        if (!isAppSwitchEnabled()) return
         if (!refreshing.compareAndSet(false, true)) return
+        if (!scope.isActive) {
+            refreshing.set(false)
+            return
+        }
         scope.launch {
             try {
+                if (!isAppSwitchEnabled()) return@launch
                 if (gateway.availability() != ShizukuAvailability.Available) return@launch
                 val result = shell.exec(COMMAND, TIMEOUT_SECONDS)
                 if (result.timedOut || result.exitCode != 0) return@launch
@@ -87,6 +97,11 @@ internal class RecentTasksSource(
                 refreshing.set(false)
             }
         }
+    }
+
+    /** Cancels the recents scope. Call when the owner is torn down. */
+    fun close() {
+        scope.cancel()
     }
 
     private companion object {

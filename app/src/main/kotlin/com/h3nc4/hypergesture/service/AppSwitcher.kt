@@ -27,6 +27,14 @@ import android.os.Process
 import android.os.SystemClock
 import android.util.Log
 import com.h3nc4.hypergesture.diagnostics.FailureLog
+import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Walks the apps the user came from, which Android exposes to nobody: there is no global
@@ -44,14 +52,45 @@ import com.h3nc4.hypergesture.diagnostics.FailureLog
  */
 internal class AppSwitcher(
     private val context: Context,
-    private val recents: RecentTasksSource = RecentTasksSource(),
+    private val isAppSwitchEnabled: () -> Boolean = { true },
+    private val recents: RecentTasksSource = RecentTasksSource(isAppSwitchEnabled = isAppSwitchEnabled),
 ) {
 
+    // Background scope for precomputing the walk. Cancelled by close().
+    private val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO + CoroutineExceptionHandler { _, throwable ->
+            Log.w(TAG, "app switch: background work failed", throwable)
+        },
+    )
+
+    private val prefetching = AtomicBoolean()
+
     /**
-     * Starts reading the real recents stack in the background. Call when a bottom-edge
-     * touch begins, so the list is ready by the time the swipe fires.
+     * Starts reading the real recents stack and precomputing the walk in the background.
+     * Call when a bottom-edge touch begins, so the list is ready by the time the swipe fires.
      */
-    fun prefetchTasks() = recents.refresh()
+    fun prefetchTasks() {
+        if (!isAppSwitchEnabled()) return
+        recents.refresh()
+        if (!prefetching.compareAndSet(false, true)) return
+        if (!scope.isActive) {
+            prefetching.set(false)
+            return
+        }
+        scope.launch {
+            try {
+                prepareWalk()
+            } finally {
+                prefetching.set(false)
+            }
+        }
+    }
+
+    /** Cancels the switcher scope and the recents scope. Call when the owner is torn down. */
+    fun close() {
+        scope.cancel()
+        recents.close()
+    }
 
     // The order this walk started from, newest first, and where in it the last step landed.
     // Kept rather than re-read because usage events lag by seconds: right after a launch the
@@ -69,38 +108,40 @@ internal class AppSwitcher(
     /** A snapshot of the walk with the app that was in front when it was read. */
     private data class Walk(val apps: List<String>, val currentIndex: Int)
 
+    // The walk is precomputed in prefetchTasks on Dispatchers.IO, so firing normally
+    // only reads the cached order. The rare cold path (first swipe, before prefetch
+    // finished) builds synchronously and proceeds instead of failing as not granted.
     fun step(toPrevious: Boolean): Boolean {
-        val now = SystemClock.elapsedRealtime()
-        // A pause long enough, or a move by hand since the last step - home, recents, a
-        // notification - means the user left the walk, so it restarts. Without the second
-        // check a step within the window would continue the stale position and open the
-        // wrong app: select something in recents, swipe, and the next swipe carries on
-        // from where the previous chain stopped.
-        val chained = walk.isNotEmpty() &&
-            now - lastStepAt <= CHAIN_WINDOW_MS &&
-            !movedByHandSince(lastStepWallClock, lastTarget)
-        if (!chained) {
+        if (!isAppSwitchEnabled()) return false
+        val cached = synchronized(this) { walk to position }
+        val currentWalk: List<String>
+        val currentPosition: Int
+        if (cached.first.isEmpty()) {
             val built = buildWalk()
-            walk = built.apps
-            // -1 when the app in front is not a switch target of its own, such as the
-            // home screen or HyperGesture itself: the first step then lands on the newest
-            // app rather than skipping past it.
-            position = built.currentIndex
+            synchronized(this) {
+                walk = built.apps
+                position = built.currentIndex
+            }
+            currentWalk = built.apps
+            currentPosition = built.currentIndex
+        } else {
+            currentWalk = cached.first
+            currentPosition = cached.second
         }
-        if (walk.isEmpty()) {
+        if (currentWalk.isEmpty()) {
             val message = "app switch: no usage events, so usage access is probably not granted"
             lastFailure = message
             Log.w(TAG, message)
             return false
         }
 
-        val next = position + if (toPrevious) 1 else -1
-        if (next !in walk.indices) {
+        val next = currentPosition + if (toPrevious) 1 else -1
+        if (next !in currentWalk.indices) {
             lastFailure = "app switch: nothing ${if (toPrevious) "older" else "newer"} than this"
             return false
         }
 
-        val target = walk[next]
+        val target = currentWalk[next]
         val intent = context.packageManager.getLaunchIntentForPackage(target)
         if (intent == null) {
             val message = "app switch: $target has no launcher entry"
@@ -114,6 +155,7 @@ internal class AppSwitcher(
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION)
 
         val launchedAt = System.currentTimeMillis()
+        val steppedAt = SystemClock.elapsedRealtime()
         return runCatching { context.startActivity(intent) }
             .onFailure { throwable ->
                 val message = "app switch: starting $target threw ${throwable.javaClass.name}"
@@ -121,13 +163,47 @@ internal class AppSwitcher(
                 FailureLog.record(context, "app switcher", throwable = throwable, message = message)
             }
             .onSuccess {
-                position = next
-                lastStepAt = now
-                lastStepWallClock = launchedAt
-                lastTarget = target
+                synchronized(this) {
+                    // Only advance if the walk has not been replaced since it was read.
+                    if (walk === currentWalk) {
+                        position = next
+                        lastStepAt = steppedAt
+                        lastStepWallClock = launchedAt
+                        lastTarget = target
+                    }
+                }
                 lastFailure = null
             }
             .isSuccess
+    }
+
+    // Runs on the background scope: decides chained versus fresh with a usage query and
+    // builds a fresh walk with the 6-hour query, both off the caller's thread.
+    private fun prepareWalk() {
+        val snapshotLastStepAt = synchronized(this) { lastStepAt }
+        val snapshotLastWallClock = synchronized(this) { lastStepWallClock }
+        val snapshotLastTarget = synchronized(this) { lastTarget }
+        val snapshotEmpty = synchronized(this) { walk.isEmpty() }
+        val now = SystemClock.elapsedRealtime()
+        // A pause long enough, or a move by hand since the last step - home, recents, a
+        // notification - means the user left the walk, so it restarts. Without the second
+        // check a step within the window would continue the stale position and open the
+        // wrong app: select something in recents, swipe, and the next swipe carries on
+        // from where the previous chain stopped.
+        val chained = !snapshotEmpty &&
+            now - snapshotLastStepAt <= CHAIN_WINDOW_MS &&
+            !movedByHandSince(snapshotLastWallClock, snapshotLastTarget)
+        if (chained) return
+        val built = buildWalk()
+        synchronized(this) {
+            // A step that launched while rebuilding owns the walk now; do not clobber it.
+            if (lastStepAt != snapshotLastStepAt) return
+            walk = built.apps
+            // -1 when the app in front is not a switch target of its own, such as the
+            // home screen or HyperGesture itself: the first step then lands on the newest
+            // app rather than skipping past it.
+            position = built.currentIndex
+        }
     }
 
     /**
@@ -244,11 +320,13 @@ internal class AppSwitcher(
      * another app the system was running over. [SYSTEM_SURFACES] covers the cases even
      * that lets past.
      */
-    private fun isPrivileged(packageName: String): Boolean = privileged.getOrPut(packageName) {
-        runCatching {
-            context.packageManager.getApplicationInfo(packageName, 0).uid <
-                Process.FIRST_APPLICATION_UID
-        }.getOrDefault(false)
+    private fun isPrivileged(packageName: String): Boolean = synchronized(privileged) {
+        privileged.getOrPut(packageName) {
+            runCatching {
+                context.packageManager.getApplicationInfo(packageName, 0).uid <
+                    Process.FIRST_APPLICATION_UID
+            }.getOrDefault(false)
+        }
     }
 
     /** Every activity that can act as home, including launchers that also run as apps. */

@@ -158,7 +158,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         // launching the collector below or that launch would finish immediately.
         recreateScopeIfCancelled()
         settings = GestureSettingsRepository(applicationContext)
-        performer = GestureActionPerformer(this)
+        performer = GestureActionPerformer(this) { configuration.appSwitchEnabled }
         windowManager = getSystemService(WindowManager::class.java)
         // Built into a local until every registration below succeeds: assigning to
         // overlay early would leave overlay != null after a partial failure and block retry.
@@ -318,6 +318,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
         navigationObserver = null
         triggerReceivers.forEach { runCatching { unregisterReceiver(it) } }
         triggerReceivers = emptyList()
+        if (::performer.isInitialized) runCatching { performer.dispose() }
         overlay?.remove()
         overlay = null
         handler.removeCallbacksAndMessages(null)
