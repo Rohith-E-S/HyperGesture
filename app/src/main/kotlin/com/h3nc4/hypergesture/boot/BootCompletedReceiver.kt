@@ -25,9 +25,11 @@ import com.h3nc4.hypergesture.navigation.NavigationIntegration
 import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
-import com.h3nc4.hypergesture.setup.AccessibilityAlert
+import com.h3nc4.hypergesture.diagnostics.FailureLog
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -41,10 +43,17 @@ class BootCompletedReceiver : BroadcastReceiver() {
 
         val pending = goAsync()
         val appContext = context.applicationContext
-        CoroutineScope(Dispatchers.IO).launch {
+        // Force repair is enqueued on the runner's scope rather than awaited under goAsync:
+        // a Shizuku shell can run well past the broadcast window.
+        NavigationRecoveryRuntime.runner(appContext).launch(RecoveryTrigger.BOOT, force = true)
+        // Only a lightweight status read stays under goAsync. The accessibility alert is
+        // deliberately not refreshed here: the service rebinds on boot by itself and
+        // cancels the alert on connect, so posting it before the rebind would be spurious.
+        val failures = CoroutineExceptionHandler { _, throwable ->
+            FailureLog.record(appContext, "boot recovery", throwable = throwable)
+        }
+        CoroutineScope(SupervisorJob() + Dispatchers.IO + failures).launch {
             try {
-                NavigationRecoveryRuntime.runner(appContext).run(RecoveryTrigger.BOOT, force = true)
-                // Read after recovery, or the log describes the state it just repaired.
                 val status = NavigationIntegration.create(appContext).status()
                 if (status.available && status.currentMode != NavigationMode.GESTURAL) {
                     Log.i(
@@ -53,9 +62,6 @@ class BootCompletedReceiver : BroadcastReceiver() {
                             "gestural navigation was not restored by the system.",
                     )
                 }
-                // HyperOS can revoke accessibility across a reboot. The alert is the only
-                // route back once the navigation bar is hidden and the app leaves Recents.
-                AccessibilityAlert.refresh(appContext)
             } finally {
                 pending.finish()
             }
