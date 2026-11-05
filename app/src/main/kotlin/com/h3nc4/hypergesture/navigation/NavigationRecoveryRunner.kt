@@ -148,7 +148,8 @@ internal class ShizukuShellRunner : ShellRunner {
         val drainErr = drain(process.errorStream, stderr)
         // The pipes reach EOF when the shell exits. Asking Shizuku for the process state
         // via waitFor() or isAlive() throws IllegalArgumentException("process hasn't exited")
-        // on some versions, so inspect exitValue() safely and fall back to 0.
+        // on some versions, so inspect exitValue() safely and report the process as not
+        // having exited rather than fabricating success.
         try {
             drainOut.join(TimeUnit.SECONDS.toMillis(timeoutSeconds) + DRAIN_JOIN_MS)
             drainErr.join(DRAIN_JOIN_MS)
@@ -163,10 +164,13 @@ internal class ShizukuShellRunner : ShellRunner {
                 timedOut = true,
             )
         }
-        val exitCode = runCatching { process.exitValue() }.getOrDefault(0)
+        val exit = runCatching { process.exitValue() }
+        val exitCode = exit.getOrDefault(-1)
+        val exited = exit.isSuccess
         return CommandResult(
             exitCode = exitCode,
             output = (stdout.toString() + stderr.toString()).trim(),
+            timedOut = !exited,
         )
     }
 
@@ -392,8 +396,12 @@ internal class NavigationRecoveryRunner(
     /** The switch turned gestures off, so a bar a repair hid has to come back. */
     private suspend fun finishWithButtons(trigger: RecoveryTrigger): RecoveryStatus =
         repairMutex.withLock {
-            restoreButtonsLocked()
-            finish(RecoveryStatus.GESTURES_OFF, trigger)
+            val restored = restoreButtonsLocked()
+            // A restore that left the bar hidden is a failure, not a quiet gestures-off.
+            finish(
+                if (restored) RecoveryStatus.GESTURES_OFF else RecoveryStatus.COMMAND_FAILED,
+                trigger,
+            )
         }
 
     /**

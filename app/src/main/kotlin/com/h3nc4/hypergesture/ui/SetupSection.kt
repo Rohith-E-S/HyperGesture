@@ -24,7 +24,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -37,15 +38,61 @@ import com.h3nc4.hypergesture.setup.SetupStep
 import com.h3nc4.hypergesture.setup.StepState
 import com.h3nc4.hypergesture.setup.TileAddOutcome
 
+private val TileAddOutcomeSaver = Saver<TileAddOutcome?, String>(
+    save = { outcome ->
+        when (outcome) {
+            null -> null
+            TileAddOutcome.Added -> "Added"
+            TileAddOutcome.AlreadyAdded -> "AlreadyAdded"
+            TileAddOutcome.Dismissed -> "Dismissed"
+            is TileAddOutcome.Refused -> "Refused:${outcome.code}"
+            is TileAddOutcome.Failed -> "Failed:${outcome.reason}"
+            TileAddOutcome.Unsupported -> "Unsupported"
+        }
+    },
+    restore = { saved ->
+        when {
+            saved == "Added" -> TileAddOutcome.Added
+            saved == "AlreadyAdded" -> TileAddOutcome.AlreadyAdded
+            saved == "Dismissed" -> TileAddOutcome.Dismissed
+            saved == "Unsupported" -> TileAddOutcome.Unsupported
+            saved.startsWith("Refused:") -> saved.removePrefix("Refused:").toIntOrNull()?.let { TileAddOutcome.Refused(it) }
+            saved.startsWith("Failed:") -> TileAddOutcome.Failed(saved.removePrefix("Failed:"))
+            else -> null
+        }
+    },
+)
+
+private val EnableRequestOutcomeSaver = Saver<EnableRequestOutcome?, String>(
+    save = { outcome ->
+        when (outcome) {
+            null -> null
+            EnableRequestOutcome.Unsupported -> "Unsupported"
+            is EnableRequestOutcome.LaunchedSettings -> "Launched:${outcome.intentAction}"
+            is EnableRequestOutcome.Failed -> "Failed:${outcome.reason}"
+        }
+    },
+    restore = { saved ->
+        when {
+            saved == "Unsupported" -> EnableRequestOutcome.Unsupported
+            saved.startsWith("Launched:") -> EnableRequestOutcome.LaunchedSettings(saved.removePrefix("Launched:"))
+            saved.startsWith("Failed:") -> EnableRequestOutcome.Failed(saved.removePrefix("Failed:"))
+            else -> null
+        }
+    },
+)
+
 @Composable
 internal fun SetupRows(items: List<SetupItem>, model: AppModel) {
     // Outcomes are held rather than their messages, so a locale change re-resolves them.
-    var tileOutcome by remember {
+    var tileOutcome by rememberSaveable(stateSaver = TileAddOutcomeSaver) {
         mutableStateOf<TileAddOutcome?>(
             TileAddOutcome.Unsupported.takeUnless { TileAddOutcome.promptAvailable(Build.VERSION.SDK_INT) },
         )
     }
-    var navigationOutcome by remember { mutableStateOf<EnableRequestOutcome?>(null) }
+    var navigationOutcome by rememberSaveable(stateSaver = EnableRequestOutcomeSaver) {
+        mutableStateOf<EnableRequestOutcome?>(null)
+    }
     val context = LocalContext.current
     items.forEach { item ->
         when (item.step) {

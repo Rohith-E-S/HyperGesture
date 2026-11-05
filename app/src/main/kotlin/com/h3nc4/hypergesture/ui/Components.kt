@@ -43,7 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -257,8 +257,8 @@ internal fun ThresholdSlider(
     formatter: @Composable (Int) -> String,
     onCommit: (Float) -> Unit,
 ) {
-    var dragging by remember { mutableStateOf(false) }
-    var local by remember { mutableFloatStateOf(value) }
+    var dragging by rememberSaveable { mutableStateOf(false) }
+    var local by rememberSaveable { mutableFloatStateOf(value) }
     LaunchedEffect(value) { if (!dragging) local = value }
 
     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

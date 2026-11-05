@@ -31,9 +31,12 @@ import com.h3nc4.hypergesture.navigation.NavigationIntegration
  * [AccessibilityService.performGlobalAction] for no clear reason, so failures are
  * recorded for the diagnostics panel instead of looking like a recognizer bug.
  */
-class GestureActionPerformer(private val service: AccessibilityService) {
+class GestureActionPerformer(
+    private val service: AccessibilityService,
+    isAppSwitchEnabled: () -> Boolean = { true },
+) {
 
-    private val switcher = AppSwitcher(service)
+    private val switcher = AppSwitcher(service, isAppSwitchEnabled = isAppSwitchEnabled)
 
     private val assistantTag: String? by lazy {
         NavigationIntegration.create(service).assistantAttributionTag
@@ -41,6 +44,9 @@ class GestureActionPerformer(private val service: AccessibilityService) {
 
     /** Called when a bottom-edge touch begins, so the recents list is ready by release. */
     fun prefetchAppSwitch() = switcher.prefetchTasks()
+
+    /** Cancels the switcher scopes. Call when the owner is torn down. */
+    fun dispose() = switcher.close()
 
     fun perform(action: GestureAction): Boolean {
         val globalAction = when (action) {

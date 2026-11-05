@@ -27,7 +27,9 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
 import java.io.File
 
@@ -47,10 +49,11 @@ internal class SessionApkInstaller(private val context: Context) : ApkInstaller 
             params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
         }
         val sessionId = installer.createSession(params)
-        installer.openSession(sessionId).use { session ->
-            session.openWrite(ReleaseParser.APK_NAME, 0, file.length()).use { output ->
+        val opened = installer.openSession(sessionId)
+        try {
+            opened.openWrite(ReleaseParser.APK_NAME, 0, file.length()).use { output ->
                 file.inputStream().use { it.copyTo(output) }
-                session.fsync(output)
+                opened.fsync(output)
             }
             // Mutable, since the installer writes its status into the extras.
             val callback = PendingIntent.getBroadcast(
@@ -59,7 +62,12 @@ internal class SessionApkInstaller(private val context: Context) : ApkInstaller 
                 Intent(context, InstallResultReceiver::class.java),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
             )
-            session.commit(callback.intentSender)
+            opened.commit(callback.intentSender)
+        } catch (e: Exception) {
+            runCatching { opened.abandon() }
+            throw e
+        } finally {
+            runCatching { opened.close() }
         }
     }.exceptionOrNull()?.reason()
 }
@@ -91,7 +99,10 @@ class InstallResultReceiver : BroadcastReceiver() {
 }
 
 private val Context.updateDataStore: DataStore<Preferences> by
-    preferencesDataStore(name = "update_check")
+    preferencesDataStore(
+        name = "update_check",
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+    )
 
 internal fun updateStore(context: Context): UpdateStore = DataStoreUpdateStore(context.updateDataStore)
 

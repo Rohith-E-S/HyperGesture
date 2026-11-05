@@ -65,6 +65,7 @@ internal class UpdateViewModel(application: Application) : AndroidViewModel(appl
     fun onResume() = launchWork { controller.onResume() }
 
     private fun launchWork(block: suspend () -> Unit) {
+        work?.cancel()
         work = viewModelScope.launch { block() }
     }
 }

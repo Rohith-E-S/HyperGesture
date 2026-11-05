@@ -22,19 +22,25 @@ import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.provider.Settings
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.h3nc4.hypergesture.gesture.GestureConfiguration
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.io.IOException
 
 private val Context.gestureDataStore: DataStore<Preferences> by
-    preferencesDataStore(name = "gesture_configuration")
+    preferencesDataStore(
+        name = "gesture_configuration",
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+    )
 
 /** Defaults are never duplicated here: a missing key falls back to [GestureConfiguration]. */
 class GestureSettingsRepository internal constructor(
@@ -49,33 +55,49 @@ class GestureSettingsRepository internal constructor(
     )
 
     val configuration: Flow<GestureConfiguration> =
-        dataStore.data.map(::toConfiguration)
+        dataStore.data
+            .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+            .map(::toConfiguration)
 
     suspend fun read(): GestureConfiguration = configuration.first()
 
     suspend fun update(transform: (GestureConfiguration) -> GestureConfiguration) {
-        val updated = transform(read())
-        dataStore.edit { preferences ->
-            preferences[ENABLED] = updated.enabled
-            preferences[EDGE_WIDTH_DP] = updated.edgeWidthDp
-            preferences[SIDE_MIN_DISTANCE_DP] = updated.sideMinimumSwipeDistanceDp
-            preferences[BOTTOM_MIN_DISTANCE_DP] = updated.bottomMinimumSwipeDistanceDp
-            preferences[MAX_ARM_DURATION_MS] = updated.maximumArmDurationMs
-            preferences[RECENTS_HOLD_MS] = updated.recentsHoldMs
-            preferences[HOLD_STILLNESS_DP] = updated.holdStillnessDp
-            preferences[OFF_AXIS_TOLERANCE] = updated.offAxisToleranceRatio
-            preferences[APP_SWITCH] = updated.appSwitchEnabled
-            preferences[LEFT_EDGE_BACK] = updated.leftEdgeBackEnabled
-            preferences[RIGHT_EDGE_BACK] = updated.rightEdgeBackEnabled
-            preferences[HAPTIC_FEEDBACK] = updated.hapticFeedbackEnabled
-            preferences[LANDSCAPE_CONFIRM] = updated.landscapeConfirmEnabled
-            preferences[CIRCLE_TO_SEARCH] = updated.circleToSearchEnabled
-            preferences[CIRCLE_TO_SEARCH_SYSTEM_TIMING] = updated.circleToSearchFollowsSystemTiming
-            preferences[CIRCLE_TO_SEARCH_HOLD_MS] = updated.circleToSearchHoldMs
+        // Atomic read-modify-write on stored values: debug overrides apply to reads
+        // only, so they never reach storage through a transform that preserves them.
+        dataStore.updateData { preferences ->
+            val updated = transform(toStoredConfiguration(preferences))
+            preferences.toMutablePreferences().apply {
+                this[ENABLED] = updated.enabled
+                this[EDGE_WIDTH_DP] = updated.edgeWidthDp
+                this[SIDE_MIN_DISTANCE_DP] = updated.sideMinimumSwipeDistanceDp
+                this[BOTTOM_MIN_DISTANCE_DP] = updated.bottomMinimumSwipeDistanceDp
+                this[MAX_ARM_DURATION_MS] = updated.maximumArmDurationMs
+                this[RECENTS_HOLD_MS] = updated.recentsHoldMs
+                this[HOLD_STILLNESS_DP] = updated.holdStillnessDp
+                this[OFF_AXIS_TOLERANCE] = updated.offAxisToleranceRatio
+                this[APP_SWITCH] = updated.appSwitchEnabled
+                this[LEFT_EDGE_BACK] = updated.leftEdgeBackEnabled
+                this[RIGHT_EDGE_BACK] = updated.rightEdgeBackEnabled
+                this[HAPTIC_FEEDBACK] = updated.hapticFeedbackEnabled
+                this[LANDSCAPE_CONFIRM] = updated.landscapeConfirmEnabled
+                this[CIRCLE_TO_SEARCH] = updated.circleToSearchEnabled
+                this[CIRCLE_TO_SEARCH_SYSTEM_TIMING] = updated.circleToSearchFollowsSystemTiming
+                this[CIRCLE_TO_SEARCH_HOLD_MS] = updated.circleToSearchHoldMs
+            }
         }
     }
 
-    private fun toConfiguration(preferences: Preferences): GestureConfiguration {
+    private fun toConfiguration(preferences: Preferences): GestureConfiguration =
+        storedConfiguration(preferences, debugRecentsHold(), debugAppSwitch())
+
+    private fun toStoredConfiguration(preferences: Preferences): GestureConfiguration =
+        storedConfiguration(preferences, recentsHoldOverride = null, appSwitchOverride = null)
+
+    private fun storedConfiguration(
+        preferences: Preferences,
+        recentsHoldOverride: Long?,
+        appSwitchOverride: Boolean?,
+    ): GestureConfiguration {
         val defaults = GestureConfiguration()
         val storedHoldMs = preferences[RECENTS_HOLD_MS] ?: defaults.recentsHoldMs
         return GestureConfiguration(
@@ -87,11 +109,11 @@ class GestureSettingsRepository internal constructor(
                 preferences[BOTTOM_MIN_DISTANCE_DP] ?: defaults.bottomMinimumSwipeDistanceDp,
             maximumArmDurationMs =
                 preferences[MAX_ARM_DURATION_MS] ?: defaults.maximumArmDurationMs,
-            recentsHoldMs = debugRecentsHold() ?: storedHoldMs,
+            recentsHoldMs = recentsHoldOverride ?: storedHoldMs,
             holdStillnessDp = preferences[HOLD_STILLNESS_DP] ?: defaults.holdStillnessDp,
             offAxisToleranceRatio =
                 preferences[OFF_AXIS_TOLERANCE] ?: defaults.offAxisToleranceRatio,
-            appSwitchEnabled = debugAppSwitch() ?: (preferences[APP_SWITCH] ?: defaults.appSwitchEnabled),
+            appSwitchEnabled = appSwitchOverride ?: (preferences[APP_SWITCH] ?: defaults.appSwitchEnabled),
             leftEdgeBackEnabled = preferences[LEFT_EDGE_BACK] ?: defaults.leftEdgeBackEnabled,
             rightEdgeBackEnabled = preferences[RIGHT_EDGE_BACK] ?: defaults.rightEdgeBackEnabled,
             hapticFeedbackEnabled = preferences[HAPTIC_FEEDBACK] ?: defaults.hapticFeedbackEnabled,

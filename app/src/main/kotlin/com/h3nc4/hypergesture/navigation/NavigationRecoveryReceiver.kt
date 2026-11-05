@@ -20,6 +20,7 @@ package com.h3nc4.hypergesture.navigation
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Only `MY_PACKAGE_REPLACED` reaches this static receiver: the other package actions and
@@ -34,10 +35,17 @@ class NavigationRecoveryReceiver : BroadcastReceiver() {
         val pending = goAsync()
         val runner = NavigationRecoveryRuntime.runner(context.applicationContext)
         // Force: a self-update is exactly when the vendor watchdog rewrites the settings.
-        runner.launch(RecoveryTrigger.PACKAGE_CHANGE, force = true)
-            .invokeOnCompletion { pending.finish() }
-        // Best effort: the delayed pass is not awaited, so goAsync stays well under 10 s.
-        runner.launch(RecoveryTrigger.PACKAGE_CHANGE, delayMs = WATCHDOG_GRACE_MS)
+        val jobs = listOf(
+            runner.launch(RecoveryTrigger.PACKAGE_CHANGE, force = true),
+            runner.launch(RecoveryTrigger.PACKAGE_CHANGE, delayMs = WATCHDOG_GRACE_MS),
+        )
+        // Hold goAsync until both passes end, so the process stays alive for the delay.
+        val remaining = AtomicInteger(jobs.size)
+        jobs.forEach { job ->
+            job.invokeOnCompletion {
+                if (remaining.decrementAndGet() == 0) pending.finish()
+            }
+        }
     }
 }
 

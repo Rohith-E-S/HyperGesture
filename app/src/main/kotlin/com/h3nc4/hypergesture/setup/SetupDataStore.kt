@@ -19,11 +19,16 @@ package com.h3nc4.hypergesture.setup
 
 import android.content.Context
 import androidx.datastore.core.DataStore
+import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.preferencesDataStore
 
 private val Context.setupDataStore: DataStore<Preferences> by
-    preferencesDataStore(name = "setup_state")
+    preferencesDataStore(
+        name = "setup_state",
+        corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() },
+    )
 
 internal val Context.setupState: SetupStateRepository
     get() = SetupStateRepository(setupDataStore)
