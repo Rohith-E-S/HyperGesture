@@ -31,22 +31,36 @@ import com.h3nc4.hypergesture.navigation.NavigationIntegration
  * [AccessibilityService.performGlobalAction] for no clear reason, so failures are
  * recorded for the diagnostics panel instead of looking like a recognizer bug.
  */
-class GestureActionPerformer(
+class GestureActionPerformer internal constructor(
     private val service: AccessibilityService,
     isAppSwitchEnabled: () -> Boolean = { true },
+    private val globalActionPerformer: (Int) -> Boolean = service::performGlobalAction,
+    private val switcher: AppSwitcher? = null,
+    private val appStepPerformer: ((Boolean) -> Boolean)? = null,
+    private val circleToSearchLauncher: () -> String? = {
+        val assistantTag = NavigationIntegration.create(service).assistantAttributionTag
+        CircleToSearchLauncher.launch(service, assistantTag)
+    },
+    private val failureRecorder: (String, Throwable?, String?) -> Unit = { label, throwable, message ->
+        FailureLog.record(service, label, throwable = throwable, message = message)
+    },
+    private val toastDisplayer: () -> Unit = {
+        runCatching {
+            Toast.makeText(service, R.string.toast_circle_to_search_failed, Toast.LENGTH_LONG)
+                .show()
+        }
+    },
 ) {
 
-    private val switcher = AppSwitcher(service, isAppSwitchEnabled = isAppSwitchEnabled)
-
-    private val assistantTag: String? by lazy {
-        NavigationIntegration.create(service).assistantAttributionTag
+    private val activeSwitcher by lazy {
+        switcher ?: AppSwitcher(service, isAppSwitchEnabled = isAppSwitchEnabled)
     }
 
     /** Called when a bottom-edge touch begins, so the recents list is ready by release. */
-    fun prefetchAppSwitch() = switcher.prefetchTasks()
+    fun prefetchAppSwitch() = activeSwitcher.prefetchTasks()
 
     /** Cancels the switcher scopes. Call when the owner is torn down. */
-    fun dispose() = switcher.close()
+    fun dispose() = activeSwitcher.close()
 
     fun perform(action: GestureAction): Boolean {
         val globalAction = when (action) {
@@ -54,39 +68,36 @@ class GestureActionPerformer(
             GestureAction.Home -> AccessibilityService.GLOBAL_ACTION_HOME
             GestureAction.Recents -> AccessibilityService.GLOBAL_ACTION_RECENTS
             // Android exposes no global action for these, so they launch instead.
-            GestureAction.PreviousApp -> return switcher.step(toPrevious = true)
-            GestureAction.NextApp -> return switcher.step(toPrevious = false)
+            GestureAction.PreviousApp -> return appStepPerformer?.invoke(true) ?: activeSwitcher.step(toPrevious = true)
+            GestureAction.NextApp -> return appStepPerformer?.invoke(false) ?: activeSwitcher.step(toPrevious = false)
             GestureAction.CircleToSearch -> return circleToSearch()
         }
 
         // performGlobalAction throws instead of returning false once the service has been
         // unbound; uncaught that kills the process and flags the service "malfunctioning".
-        val performed = runCatching { service.performGlobalAction(globalAction) }
+        val performed = runCatching { globalActionPerformer(globalAction) }
             .getOrElse { throwable ->
                 val message = "${action.id}: performGlobalAction threw ${throwable.javaClass.name}"
                 lastFailure = message
-                FailureLog.record(service, "global action", throwable = throwable, message = message)
+                failureRecorder("global action", throwable, message)
                 return false
             }
         if (!performed) {
             // No retry: a repeated global action can double-navigate.
             val message = "${action.id}: performGlobalAction returned false"
             lastFailure = message
-            FailureLog.record(service, "global action", message = message)
+            failureRecorder("global action", null, message)
         }
         return performed
     }
 
     // A missing default assistant is invisible from a gesture, so it is said on screen too.
     private fun circleToSearch(): Boolean {
-        val problem = CircleToSearchLauncher.launch(service, assistantTag) ?: return true
+        val problem = circleToSearchLauncher() ?: return true
         lastCircleToSearchFailure = problem
-        FailureLog.record(service, "circle to search", message = problem)
+        failureRecorder("circle to search", null, problem)
         Log.w(TAG, "CIRCLE_TO_SEARCH_FAILED $problem")
-        runCatching {
-            Toast.makeText(service, R.string.toast_circle_to_search_failed, Toast.LENGTH_LONG)
-                .show()
-        }
+        toastDisplayer()
         return false
     }
 

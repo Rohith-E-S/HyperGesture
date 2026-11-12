@@ -130,8 +130,7 @@ object FailureLog {
         return "${base.take(takeLen)}$TRUNCATED_MARKER"
     }
 
-    internal fun currentTimestamp(): String =
-        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+    internal fun currentTimestamp(): String = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
 
     private fun file(context: Context) = File(context.filesDir, FILE_NAME)
 }

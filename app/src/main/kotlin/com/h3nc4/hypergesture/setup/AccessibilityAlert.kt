@@ -34,7 +34,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -42,8 +41,7 @@ import kotlinx.coroutines.launch
  * True only for a user who has already run the service and whose access is gone now.
  * A fresh install that never turned accessibility on must not be nagged at boot.
  */
-internal fun shouldShowGesturesOffAlert(serviceBound: Boolean, serviceEverEnabled: Boolean): Boolean =
-    !serviceBound && serviceEverEnabled
+internal fun shouldShowGesturesOffAlert(serviceBound: Boolean, serviceEverEnabled: Boolean): Boolean = !serviceBound && serviceEverEnabled
 
 /**
  * Keeps a notification in the shade while gestures cannot run.
@@ -114,22 +112,21 @@ object AccessibilityAlert {
         context.getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
     }
 
-    private fun notification(context: Context): Notification =
-        NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_tile)
-            .setContentTitle(context.getString(R.string.alert_gestures_off_title))
-            .setContentText(context.getString(R.string.alert_gestures_off_body))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(context.getString(R.string.alert_gestures_off_body)))
-            .setContentIntent(openApp(context))
-            .addAction(0, context.getString(R.string.action_turn_on), turnOn(context))
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-            // Every boot and periodic check refreshes the same notification without a new
-            // sound or a new timestamp that would make it look like a fresh incident.
-            .setOnlyAlertOnce(true)
-            .setShowWhen(false)
-            .setAutoCancel(false)
-            .build()
+    private fun notification(context: Context): Notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        .setSmallIcon(R.drawable.ic_tile)
+        .setContentTitle(context.getString(R.string.alert_gestures_off_title))
+        .setContentText(context.getString(R.string.alert_gestures_off_body))
+        .setStyle(NotificationCompat.BigTextStyle().bigText(context.getString(R.string.alert_gestures_off_body)))
+        .setContentIntent(openApp(context))
+        .addAction(0, context.getString(R.string.action_turn_on), turnOn(context))
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        // Every boot and periodic check refreshes the same notification without a new
+        // sound or a new timestamp that would make it look like a fresh incident.
+        .setOnlyAlertOnce(true)
+        .setShowWhen(false)
+        .setAutoCancel(false)
+        .build()
 
     private fun openApp(context: Context): PendingIntent = PendingIntent.getActivity(
         context,

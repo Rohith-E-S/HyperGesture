@@ -221,7 +221,8 @@ class GestureTracker(
             if (holdAction == null && !isPastTrigger(origin, sample)) return TrackerAction.Reverted
             // Released above the edge after a sideways sample: a DOWN, one sideways MOVE and
             // then UP delivers no upward MOVE to re-arm Home, so the release itself must.
-            if (state is Arm.Sideways && sidewaysAction(origin, sample) == null &&
+            if (state is Arm.Sideways &&
+                sidewaysAction(origin, sample) == null &&
                 hasArmed(origin, sample)
             ) {
                 return TrackerAction.Fire(shortAction, edge)
@@ -279,8 +280,7 @@ class GestureTracker(
         return abs(offAxisPx) <= travelPx * configuration.offAxisToleranceRatio
     }
 
-    private fun isPastTrigger(origin: TouchSample, sample: TouchSample): Boolean =
-        travelFrom(origin, sample) >= minimumDistancePx
+    private fun isPastTrigger(origin: TouchSample, sample: TouchSample): Boolean = travelFrom(origin, sample) >= minimumDistancePx
 
     /** Positive inward, negative outward. */
     private fun travelFrom(origin: TouchSample, sample: TouchSample): Float = when (edge) {

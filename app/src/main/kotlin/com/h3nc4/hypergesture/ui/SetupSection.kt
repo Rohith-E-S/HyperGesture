@@ -138,9 +138,11 @@ internal fun SetupRows(items: List<SetupItem>, model: AppModel) {
                 pending = R.string.step_tile_body,
                 done = R.string.step_tile_done,
                 outcome = tileOutcome?.let { tileOutcomeMessage(it) },
-                open = (R.string.action_add_tile to {
-                    requestTile(context) { tileOutcome = it }
-                }).takeIf { TileAddOutcome.promptAvailable(Build.VERSION.SDK_INT) },
+                open = (
+                    R.string.action_add_tile to {
+                        requestTile(context) { tileOutcome = it }
+                    }
+                    ).takeIf { TileAddOutcome.promptAvailable(Build.VERSION.SDK_INT) },
             )
             SetupStep.NAVIGATION_BAR -> StepRow(
                 item = item,

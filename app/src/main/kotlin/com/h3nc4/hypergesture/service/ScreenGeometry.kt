@@ -18,8 +18,10 @@
 package com.h3nc4.hypergesture.service
 
 import android.content.Context
+import android.view.Gravity
 import android.view.WindowInsets
 import android.view.WindowManager
+import com.h3nc4.hypergesture.gesture.ScreenEdge
 
 /**
  * Read from `currentWindowMetrics`, never `resources.displayMetrics`: the latter can
@@ -62,3 +64,35 @@ internal data class OverlayLayout(
     val sideLengthPercent: Int = 80,
     val bottomLengthPercent: Int = 90,
 )
+
+internal data class StripDimensions(
+    val widthPx: Int,
+    val heightPx: Int,
+    val gravity: Int,
+)
+
+internal fun calculateStripDimensions(
+    edge: ScreenEdge,
+    edgeWidthDp: Float,
+    geometry: ScreenGeometry,
+    layout: OverlayLayout = OverlayLayout(),
+): StripDimensions {
+    val thicknessPx = (edgeWidthDp * geometry.density).toInt().coerceAtLeast(1)
+    return when (edge) {
+        ScreenEdge.LEFT -> StripDimensions(
+            widthPx = thicknessPx + geometry.navLeftPx,
+            heightPx = (geometry.heightPx * layout.sideLengthPercent / 100).coerceAtLeast(1),
+            gravity = Gravity.START or Gravity.CENTER_VERTICAL,
+        )
+        ScreenEdge.RIGHT -> StripDimensions(
+            widthPx = thicknessPx + geometry.navRightPx,
+            heightPx = (geometry.heightPx * layout.sideLengthPercent / 100).coerceAtLeast(1),
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL,
+        )
+        ScreenEdge.BOTTOM -> StripDimensions(
+            widthPx = (geometry.widthPx * layout.bottomLengthPercent / 100).coerceAtLeast(1),
+            heightPx = thicknessPx + geometry.navBottomPx,
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
+        )
+    }
+}

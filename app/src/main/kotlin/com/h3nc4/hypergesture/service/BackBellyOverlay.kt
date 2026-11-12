@@ -246,8 +246,7 @@ internal class BackBellyOverlay(
             canvas.drawPath(arrowPath, arrowPaint)
         }
 
-        private fun fromEdge(inset: Float): Float =
-            if (edge == ScreenEdge.LEFT) inset else width - inset
+        private fun fromEdge(inset: Float): Float = if (edge == ScreenEdge.LEFT) inset else width - inset
 
         private companion object {
             const val BELLY_ALPHA = 204

@@ -109,12 +109,18 @@ internal fun TroubleshootingScreen(model: AppModel) {
     )
     InfoRow(
         title = stringResource(
-            if (diagnostics.serviceStatus == ServiceStatus.STOPPED) R.string.fix_service_stopped_title
-            else R.string.fix_stopped_title,
+            if (diagnostics.serviceStatus == ServiceStatus.STOPPED) {
+                R.string.fix_service_stopped_title
+            } else {
+                R.string.fix_stopped_title
+            },
         ),
         supporting = stringResource(
-            if (diagnostics.serviceStatus == ServiceStatus.STOPPED) R.string.fix_service_stopped_body
-            else R.string.fix_stopped_body,
+            if (diagnostics.serviceStatus == ServiceStatus.STOPPED) {
+                R.string.fix_service_stopped_body
+            } else {
+                R.string.fix_stopped_body
+            },
         ),
         actions = {
             OutlinedButton(onClick = { openAccessibility(context) }) {
@@ -253,4 +259,3 @@ private fun integrationLabel(id: String): String = when (id) {
 }
 
 private const val DISPLAY_FAILURE_CHARS = 2000
-

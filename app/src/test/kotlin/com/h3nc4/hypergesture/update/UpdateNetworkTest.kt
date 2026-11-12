@@ -66,11 +66,9 @@ class UpdateNetworkTest {
         }
     }
 
-    private fun redirect(location: String?) =
-        FakeResponse(302, headers = location?.let { mapOf("Location" to it) }.orEmpty())
+    private fun redirect(location: String?) = FakeResponse(302, headers = location?.let { mapOf("Location" to it) }.orEmpty())
 
-    private fun sha256(bytes: ByteArray) =
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+    private fun sha256(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
     // Four 64 KiB buffers and a bit, so progress moves more than once.
     private val apkBytes = ByteArray(200_000) { (it % 251).toByte() }
@@ -84,11 +82,9 @@ class UpdateNetworkTest {
 
     private val directory by lazy { File(temp.root, "update") }
 
-    private fun downloader(transport: HttpTransport) =
-        HttpApkDownloader(directory, transport, EmptyCoroutineContext)
+    private fun downloader(transport: HttpTransport) = HttpApkDownloader(directory, transport, EmptyCoroutineContext)
 
-    private fun serving(response: () -> FakeResponse = { FakeResponse(200, apkBytes) }) =
-        FakeTransport(mapOf(apkUrl to response))
+    private fun serving(response: () -> FakeResponse = { FakeResponse(200, apkBytes) }) = FakeTransport(mapOf(apkUrl to response))
 
     private fun download(transport: HttpTransport, asset: ReleaseAsset = asset()): Pair<DownloadResult, List<Int?>> {
         val reports = mutableListOf<Int?>()

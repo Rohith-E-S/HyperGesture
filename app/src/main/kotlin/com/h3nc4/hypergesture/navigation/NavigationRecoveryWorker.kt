@@ -21,8 +21,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.h3nc4.hypergesture.setup.AccessibilityAlert
 
-class NavigationRecoveryWorker(context: Context, parameters: WorkerParameters) :
-    CoroutineWorker(context, parameters) {
+class NavigationRecoveryWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
 
     override suspend fun doWork(): Result {
         // Await the run: returning early lets WorkManager stop the process mid-repair.

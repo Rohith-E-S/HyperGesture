@@ -22,8 +22,7 @@ import org.junit.Test
 
 class AppWalkTest {
 
-    private fun visit(packageName: String, resumedAtMs: Long, dwellMs: Long) =
-        AppVisit(packageName, className = null, resumedAtMs = resumedAtMs, dwellMs = dwellMs)
+    private fun visit(packageName: String, resumedAtMs: Long, dwellMs: Long) = AppVisit(packageName, className = null, resumedAtMs = resumedAtMs, dwellMs = dwellMs)
 
     private fun walk(
         visits: List<AppVisit>,
@@ -109,6 +108,65 @@ class AppWalkTest {
         assertEquals(
             listOf("app.c" to "app.b", "app.b" to "app.a", "app.a" to null),
             seen,
+        )
+    }
+
+    @Test
+    fun `empty visits list with null current package returns empty list`() {
+        assertEquals(emptyList<String>(), walk(emptyList(), currentPackage = null))
+    }
+
+    @Test
+    fun `empty visits list with non-null current package returns empty list`() {
+        assertEquals(emptyList<String>(), walk(emptyList(), currentPackage = "app.none"))
+    }
+
+    @Test
+    fun `visit with dwell time exactly equal to minimumDwellMs is kept`() {
+        val visits = listOf(
+            visit("app.a", 0L, 1_000L),
+        )
+        assertEquals(listOf("app.a"), walk(visits, currentPackage = "app.a"))
+    }
+
+    @Test
+    fun `visit with dwell time 1ms less than minimumDwellMs is dropped`() {
+        val visits = listOf(
+            visit("app.a", 0L, 2_000L),
+            visit("app.b", 2_000L, 999L),
+        )
+        assertEquals(listOf("app.a"), walk(visits, currentPackage = "app.a"))
+    }
+
+    @Test
+    fun `multiple rapid visits of same package consolidate to newest position`() {
+        val visits = listOf(
+            visit("app.a", 0L, 2_000L),
+            visit("app.b", 2_000L, 2_000L),
+            visit("app.a", 4_000L, 2_000L),
+            visit("app.b", 6_000L, 2_000L),
+        )
+        assertEquals(listOf("app.b", "app.a"), walk(visits, currentPackage = "app.b"))
+    }
+
+    @Test
+    fun `current package retained at front even when visit duration is below minimum`() {
+        val visits = listOf(
+            visit("app.a", 0L, 3_000L),
+            visit("app.b", 3_000L, 200L),
+        )
+        assertEquals(listOf("app.b", "app.a"), walk(visits, currentPackage = "app.b"))
+    }
+
+    @Test
+    fun `current package dropped when isTarget predicate rejects it`() {
+        val visits = listOf(
+            visit("app.a", 0L, 2_000L),
+            visit("rejected.app", 2_000L, 300L),
+        )
+        assertEquals(
+            listOf("app.a"),
+            walk(visits, currentPackage = "rejected.app") { v, _ -> v.packageName != "rejected.app" },
         )
     }
 }

@@ -55,8 +55,7 @@ internal object NavigationSettingTargets {
         SettingTarget("global", "use_gesture_version_three", "1"),
     )
 
-    fun targets(includeHyperOs: Boolean): List<SettingTarget> =
-        if (includeHyperOs) all + hyperOs else all
+    fun targets(includeHyperOs: Boolean): List<SettingTarget> = if (includeHyperOs) all + hyperOs else all
 
     fun verified(values: Map<String, String?>, includeHyperOs: Boolean = false): Boolean {
         if (!all.all { values[it.key] == it.value }) return false
@@ -67,8 +66,7 @@ internal object NavigationSettingTargets {
         return values[flag.key]?.let { it == flag.value } ?: true
     }
 
-    fun buttonsHidden(values: Map<String, String?>): Boolean =
-        values["force_fsg_nav_bar"] == "1" || values["navigation_mode"] == "2"
+    fun buttonsHidden(values: Map<String, String?>): Boolean = values["force_fsg_nav_bar"] == "1" || values["navigation_mode"] == "2"
 }
 
 internal data class SettingTarget(val namespace: String, val key: String, val value: String)
@@ -129,12 +127,11 @@ internal object SystemShizukuGateway : ShizukuGateway {
  */
 internal class ShizukuShellRunner : ShellRunner {
 
-    override suspend fun exec(command: String, timeoutSeconds: Long): CommandResult =
-        runInterruptible(Dispatchers.IO) {
-            runCatching { run(command, timeoutSeconds) }.getOrElse { throwable ->
-                CommandResult(exitCode = -1, output = throwable.message ?: throwable.javaClass.name)
-            }
+    override suspend fun exec(command: String, timeoutSeconds: Long): CommandResult = runInterruptible(Dispatchers.IO) {
+        runCatching { run(command, timeoutSeconds) }.getOrElse { throwable ->
+            CommandResult(exitCode = -1, output = throwable.message ?: throwable.javaClass.name)
         }
+    }
 
     private fun run(command: String, timeoutSeconds: Long): CommandResult {
         val process = try {
@@ -174,13 +171,12 @@ internal class ShizukuShellRunner : ShellRunner {
         )
     }
 
-    private fun drain(stream: InputStream, sink: StringBuilder) =
-        Thread({
-            runCatching { stream.bufferedReader().use { sink.append(it.readText()) } }
-        }, "shizuku-shell-drain").apply {
-            isDaemon = true
-            start()
-        }
+    private fun drain(stream: InputStream, sink: StringBuilder) = Thread({
+        runCatching { stream.bufferedReader().use { sink.append(it.readText()) } }
+    }, "shizuku-shell-drain").apply {
+        isDaemon = true
+        start()
+    }
 
     private companion object {
         const val DRAIN_JOIN_MS = 1_000L
@@ -265,8 +261,7 @@ internal object NavigationRecoveryScript {
     }
 
     /** True only when the script ran to the end and every grant reported success. */
-    fun grantsSucceeded(output: String): Boolean =
-        output.lineSequence().any { it.trim() == "${EXEMPTIONS_MARKER}1" }
+    fun grantsSucceeded(output: String): Boolean = output.lineSequence().any { it.trim() == "${EXEMPTIONS_MARKER}1" }
 
     fun buildRestoreButtons(hyperOs: Boolean): String = buildList {
         add("settings put global force_fsg_nav_bar 0")
@@ -328,11 +323,10 @@ internal class NavigationRecoveryRunner(
 ) {
     private val repairMutex = Mutex()
 
-    fun launch(trigger: RecoveryTrigger, force: Boolean = false, delayMs: Long = 0): Job =
-        scope.launch {
-            if (delayMs > 0) delay(delayMs)
-            run(trigger, force)
-        }
+    fun launch(trigger: RecoveryTrigger, force: Boolean = false, delayMs: Long = 0): Job = scope.launch {
+        if (delayMs > 0) delay(delayMs)
+        run(trigger, force)
+    }
 
     /** Probes first, so a steady state spawns no process at all. */
     suspend fun run(trigger: RecoveryTrigger, force: Boolean = false): RecoveryStatus? {
@@ -394,15 +388,14 @@ internal class NavigationRecoveryRunner(
     }
 
     /** The switch turned gestures off, so a bar a repair hid has to come back. */
-    private suspend fun finishWithButtons(trigger: RecoveryTrigger): RecoveryStatus =
-        repairMutex.withLock {
-            val restored = restoreButtonsLocked()
-            // A restore that left the bar hidden is a failure, not a quiet gestures-off.
-            finish(
-                if (restored) RecoveryStatus.GESTURES_OFF else RecoveryStatus.COMMAND_FAILED,
-                trigger,
-            )
-        }
+    private suspend fun finishWithButtons(trigger: RecoveryTrigger): RecoveryStatus = repairMutex.withLock {
+        val restored = restoreButtonsLocked()
+        // A restore that left the bar hidden is a failure, not a quiet gestures-off.
+        finish(
+            if (restored) RecoveryStatus.GESTURES_OFF else RecoveryStatus.COMMAND_FAILED,
+            trigger,
+        )
+    }
 
     /**
      * The one the switch calls directly, because a user who turned recovery off keeps a
@@ -449,11 +442,10 @@ internal class NavigationRecoveryRunner(
         }
     }
 
-    private fun valuesAreCorrect(hyperOs: Boolean): Boolean =
-        NavigationSettingTargets.verified(
-            runCatching { settings.navigationValues() }.getOrDefault(emptyMap()),
-            includeHyperOs = hyperOs,
-        )
+    private fun valuesAreCorrect(hyperOs: Boolean): Boolean = NavigationSettingTargets.verified(
+        runCatching { settings.navigationValues() }.getOrDefault(emptyMap()),
+        includeHyperOs = hyperOs,
+    )
 
     private suspend fun executeRestoreButtons(hyperOs: Boolean) {
         val script = NavigationRecoveryScript.buildRestoreButtons(hyperOs)
@@ -477,10 +469,9 @@ internal class NavigationRecoveryRunner(
         }
     }
 
-    private fun buttonsHidden(): Boolean =
-        NavigationSettingTargets.buttonsHidden(
-            runCatching { settings.navigationValues() }.getOrDefault(emptyMap()),
-        )
+    private fun buttonsHidden(): Boolean = NavigationSettingTargets.buttonsHidden(
+        runCatching { settings.navigationValues() }.getOrDefault(emptyMap()),
+    )
 
     private suspend fun finish(status: RecoveryStatus, trigger: RecoveryTrigger): RecoveryStatus {
         store.record(status, trigger, now())
@@ -493,8 +484,7 @@ internal class NavigationRecoveryRunner(
         ShizukuAvailability.PermissionDenied -> RecoveryStatus.PERMISSION_DENIED
     }
 
-    private fun ShizukuAvailability.failureStatus(): RecoveryStatus =
-        if (this == ShizukuAvailability.Available) RecoveryStatus.COMMAND_FAILED else status()
+    private fun ShizukuAvailability.failureStatus(): RecoveryStatus = if (this == ShizukuAvailability.Available) RecoveryStatus.COMMAND_FAILED else status()
 
     private companion object {
         const val SHELL_TIMEOUT_SECONDS = 8L
@@ -507,10 +497,9 @@ internal object NavigationRecoveryRuntime {
     @Volatile
     private var runner: NavigationRecoveryRunner? = null
 
-    fun runner(context: Context): NavigationRecoveryRunner =
-        runner ?: synchronized(this) {
-            runner ?: create(context.applicationContext).also { runner = it }
-        }
+    fun runner(context: Context): NavigationRecoveryRunner = runner ?: synchronized(this) {
+        runner ?: create(context.applicationContext).also { runner = it }
+    }
 
     private fun create(context: Context): NavigationRecoveryRunner {
         val failures = CoroutineExceptionHandler { _, throwable ->

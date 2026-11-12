@@ -40,7 +40,8 @@ internal object NavigationModeReader {
 
     fun isHyperOsDevice(): Boolean {
         val manufacturer = Build.MANUFACTURER.lowercase()
-        val vendorKnown = manufacturer == "xiaomi" || manufacturer == "redmi" ||
+        val vendorKnown = manufacturer == "xiaomi" ||
+            manufacturer == "redmi" ||
             manufacturer == "poco"
         return vendorKnown && (hyperOsVersion() != null || miuiVersion() != null)
     }

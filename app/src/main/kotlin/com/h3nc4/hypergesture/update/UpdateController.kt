@@ -37,14 +37,13 @@ internal sealed interface FetchResult {
 
     companion object {
         /** GitHub answers an exhausted quota with 403 or 429 and a zero remaining header. */
-        fun of(code: Int, remaining: String?, reset: String?, body: () -> String): FetchResult =
-            when {
-                code == 200 -> Ok(body())
-                code == 404 -> NotFound
-                code == 429 || (code == 403 && remaining == "0") ->
-                    RateLimited(reset?.toLongOrNull())
-                else -> HttpError(code)
-            }
+        fun of(code: Int, remaining: String?, reset: String?, body: () -> String): FetchResult = when {
+            code == 200 -> Ok(body())
+            code == 404 -> NotFound
+            code == 429 || (code == 403 && remaining == "0") ->
+                RateLimited(reset?.toLongOrNull())
+            else -> HttpError(code)
+        }
     }
 }
 
@@ -138,7 +137,8 @@ internal data class UpdateState(
     val installedVersion: String? = null,
 ) {
     val busy: Boolean
-        get() = phase == UpdatePhase.Checking || phase is UpdatePhase.Downloading ||
+        get() = phase == UpdatePhase.Checking ||
+            phase is UpdatePhase.Downloading ||
             phase == UpdatePhase.Confirming
 }
 

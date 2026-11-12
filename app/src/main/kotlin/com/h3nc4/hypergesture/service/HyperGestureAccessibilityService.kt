@@ -66,14 +66,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.hypot
 
 /**
  * Hosts the edge strips in-process rather than in a foreground service:
  * `TYPE_ACCESSIBILITY_OVERLAY` needs no `SYSTEM_ALERT_WINDOW` permission and no ongoing
  * notification, and the framework rebinds an enabled service itself, so no watchdog.
  */
-class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
+class HyperGestureAccessibilityService :
+    AccessibilityService(),
+    TouchReplayer {
 
     /**
      * An uncaught throw in [scope] - realistically DataStore on an unreadable file -
@@ -338,35 +339,28 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
      * remainder of [WINDOW_SETTLE_MS] still has to be waited out.
      */
     override fun replay(samples: List<TouchSample>, onDone: () -> Unit): Boolean {
-        if (samples.isEmpty()) return false
-
-        val first = samples.first()
-        val last = samples.last()
-        val movedPx = hypot(last.xPx - first.xPx, last.yPx - first.yPx)
-        val isTap = movedPx < TAP_SLOP_PX
-        val rawDurationMs = last.timestampMs - first.timestampMs
+        val plan = TouchReplayPlanner.plan(
+            samples = samples,
+            longPressTimeoutMs = ViewConfiguration.getLongPressTimeout().toLong(),
+        ) ?: return false
 
         val path = Path().apply {
-            moveTo(first.xPx, first.yPx)
-            if (isTap) {
+            val first = plan.pathPoints.first()
+            moveTo(first.first, first.second)
+            if (plan.isTap) {
                 // dispatchGesture rejects a zero-length path. Nudge by a sub-slop pixel:
                 // still a tap, not a drag.
-                lineTo(first.xPx + 1f, first.yPx + 1f)
+                val second = plan.pathPoints[1]
+                lineTo(second.first, second.second)
             } else {
-                for (i in 1 until samples.size) lineTo(samples[i].xPx, samples[i].yPx)
+                for (i in 1 until plan.pathPoints.size) {
+                    val pt = plan.pathPoints[i]
+                    lineTo(pt.first, pt.second)
+                }
             }
         }
 
-        val durationMs = when {
-            !isTap -> rawDurationMs.coerceIn(1L, MAX_REPLAY_MS)
-            // A deliberate hold: mirror it so the target's long-press fires too.
-            rawDurationMs >= ViewConfiguration.getLongPressTimeout() ->
-                rawDurationMs.coerceAtMost(MAX_REPLAY_MS)
-            // The click fires at the end of the stroke, so capping it cuts perceived
-            // tap latency; the press physically happened already.
-            else -> rawDurationMs.coerceIn(MIN_TAP_MS, TAP_STROKE_CAP_MS)
-        }
-
+        val durationMs = plan.durationMs
         val gesture = runCatching {
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0L, durationMs))
@@ -376,7 +370,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             return false
         }
 
-        val settleDelayMs = WINDOW_SETTLE_MS
+        val settleDelayMs = TouchReplayPlanner.WINDOW_SETTLE_MS
         var finished = false
         val finish = Runnable {
             if (!finished) {
@@ -385,7 +379,7 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
             }
         }
         // Safety net: release the strips even if the result callback never arrives.
-        handler.postDelayed(finish, durationMs + settleDelayMs + FINISH_GRACE_MS)
+        handler.postDelayed(finish, plan.timeoutMs)
         handler.postDelayed({
             // After this delay the service may be unbound, and dispatchGesture then throws
             // instead of returning false; uncaught that kills the process and gets the
@@ -430,22 +424,22 @@ class HyperGestureAccessibilityService : AccessibilityService(), TouchReplayer {
     companion object {
         private const val TAG = "HyperGesture"
 
-        private const val MAX_REPLAY_MS = 3_000L
+        const val MAX_REPLAY_MS = TouchReplayPlanner.MAX_REPLAY_MS
 
         /** A 1ms stroke completes but never clicks. */
-        private const val MIN_TAP_MS = 50L
+        const val MIN_TAP_MS = TouchReplayPlanner.MIN_TAP_MS
 
-        private const val TAP_STROKE_CAP_MS = 60L
+        const val TAP_STROKE_CAP_MS = TouchReplayPlanner.TAP_STROKE_CAP_MS
 
-        private const val TAP_SLOP_PX = 12f
+        const val TAP_SLOP_PX = TouchReplayPlanner.TAP_SLOP_PX
 
         /**
          * Grace for the non-touchable + alpha-0 update to reach the input pipeline, so the
          * injected touch is not discarded as obscured.
          */
-        private const val WINDOW_SETTLE_MS = 65L
+        const val WINDOW_SETTLE_MS = TouchReplayPlanner.WINDOW_SETTLE_MS
 
-        private const val FINISH_GRACE_MS = 1_000L
+        const val FINISH_GRACE_MS = TouchReplayPlanner.FINISH_GRACE_MS
 
         @Volatile
         private var instance: HyperGestureAccessibilityService? = null

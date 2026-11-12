@@ -30,8 +30,7 @@ import java.io.IOException
 
 internal class DataStoreUpdateStore(private val store: DataStore<Preferences>) : UpdateStore {
 
-    private suspend fun preferences() =
-        store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.first()
+    private suspend fun preferences() = store.data.catch { if (it is IOException) emit(emptyPreferences()) else throw it }.first()
 
     override suspend fun enabled(): Boolean = preferences()[ENABLED] ?: false
 

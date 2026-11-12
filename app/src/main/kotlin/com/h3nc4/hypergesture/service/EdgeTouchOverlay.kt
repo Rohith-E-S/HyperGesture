@@ -27,7 +27,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
@@ -183,27 +182,12 @@ internal class EdgeTouchOverlay(
         configuration: GestureConfiguration,
         geometry: ScreenGeometry,
     ): WindowManager.LayoutParams {
-        val thicknessPx = (configuration.edgeWidthDp * geometry.density).toInt().coerceAtLeast(1)
-
-        // Each strip is extended across its own edge's navigation-bar inset: the bar is
-        // slippery, so a swipe starting on it lands on us only after leaving the bar.
-        val (widthPx, heightPx, gravity) = when (edge) {
-            ScreenEdge.LEFT -> Triple(
-                thicknessPx + geometry.navLeftPx,
-                (geometry.heightPx * layout.sideLengthPercent / 100).coerceAtLeast(1),
-                Gravity.START or Gravity.CENTER_VERTICAL,
-            )
-            ScreenEdge.RIGHT -> Triple(
-                thicknessPx + geometry.navRightPx,
-                (geometry.heightPx * layout.sideLengthPercent / 100).coerceAtLeast(1),
-                Gravity.END or Gravity.CENTER_VERTICAL,
-            )
-            ScreenEdge.BOTTOM -> Triple(
-                (geometry.widthPx * layout.bottomLengthPercent / 100).coerceAtLeast(1),
-                thicknessPx + geometry.navBottomPx,
-                Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL,
-            )
-        }
+        val (widthPx, heightPx, gravity) = calculateStripDimensions(
+            edge = edge,
+            edgeWidthDp = configuration.edgeWidthDp,
+            geometry = geometry,
+            layout = layout,
+        )
 
         return WindowManager.LayoutParams(
             widthPx,
@@ -503,6 +487,7 @@ internal class EdgeTouchOverlay(
 
     private companion object {
         const val TAG = "HyperGesture"
+
         /** Above replay settle delay (65ms) + max replay duration (3,000ms) + grace (1,000ms). */
         const val STREAM_WATCHDOG_TIMEOUT_MS = 5_000L
     }

@@ -243,12 +243,14 @@ class NavigationRecoveryRunnerTest {
         assertEquals(RecoveryStatus.SETUP_INCOMPLETE, f.runner.run(RecoveryTrigger.RESUME))
 
         assertFalse(f.shell.commands.isEmpty())
-        assertTrue(f.shell.commands.any {
-            it.contains("settings put secure enabled_accessibility_services") &&
-                it.contains("com.h3nc4.hypergesture") &&
-                it.contains("settings put secure accessibility_enabled 0") &&
-                it.contains("settings put secure accessibility_enabled 1")
-        })
+        assertTrue(
+            f.shell.commands.any {
+                it.contains("settings put secure enabled_accessibility_services") &&
+                    it.contains("com.h3nc4.hypergesture") &&
+                    it.contains("settings put secure accessibility_enabled 0") &&
+                    it.contains("settings put secure accessibility_enabled 1")
+            },
+        )
     }
 
     @Test
@@ -277,19 +279,18 @@ class NavigationRecoveryRunnerTest {
 
     /** The re-check inside the mutex: setup can break while the run waits for the lock. */
     @Test
-    fun `setup lost after the first check still refuses the repair that hides the buttons`() =
-        runBlocking {
-            val f = Fixture(this)
-            f.values(correct = false)
-            f.settings.onRead = { f.setupComplete = false }
+    fun `setup lost after the first check still refuses the repair that hides the buttons`() = runBlocking {
+        val f = Fixture(this)
+        f.values(correct = false)
+        f.settings.onRead = { f.setupComplete = false }
 
-            assertEquals(
-                RecoveryStatus.SETUP_INCOMPLETE,
-                f.runner.run(RecoveryTrigger.SETTINGS_OBSERVER),
-            )
+        assertEquals(
+            RecoveryStatus.SETUP_INCOMPLETE,
+            f.runner.run(RecoveryTrigger.SETTINGS_OBSERVER),
+        )
 
-            assertTrue(f.shell.commands.isEmpty())
-        }
+        assertTrue(f.shell.commands.isEmpty())
+    }
 
     @Test
     fun `correct values need no process at all`() = runBlocking {
