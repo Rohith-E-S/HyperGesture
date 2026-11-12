@@ -36,8 +36,7 @@ internal data class AppVersion(val numbers: List<Int>, val suffix: String?) : Co
         }
     }
 
-    override fun toString(): String =
-        numbers.joinToString(".") + (suffix?.let { "-$it" } ?: "")
+    override fun toString(): String = numbers.joinToString(".") + (suffix?.let { "-$it" } ?: "")
 
     companion object {
         private val PATTERN = Regex("""^(?:fork-)?v?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z.-]+))?$""")
@@ -71,8 +70,7 @@ internal object ReleaseParser {
 
     const val APK_NAME = "hypergesture.apk"
 
-    class MalformedRelease(override val message: String, cause: Throwable? = null) :
-        Exception(message, cause)
+    class MalformedRelease(override val message: String, cause: Throwable? = null) : Exception(message, cause)
 
     fun parse(body: String): Release {
         val json = try {
@@ -140,8 +138,7 @@ internal object UpdateSchedule {
     const val INTERVAL_MS = 24L * 60 * 60 * 1000
 
     /** A clock set backwards counts as due, or a wrong date would silence the check for days. */
-    fun isDue(nowMs: Long, lastAttemptMs: Long?): Boolean =
-        lastAttemptMs == null || nowMs < lastAttemptMs || nowMs - lastAttemptMs >= INTERVAL_MS
+    fun isDue(nowMs: Long, lastAttemptMs: Long?): Boolean = lastAttemptMs == null || nowMs < lastAttemptMs || nowMs - lastAttemptMs >= INTERVAL_MS
 }
 
 /** The API host plus where GitHub redirects an asset download, and nothing else. */

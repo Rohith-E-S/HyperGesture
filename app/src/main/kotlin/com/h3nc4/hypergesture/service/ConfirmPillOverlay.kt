@@ -121,9 +121,8 @@ internal class ConfirmPillOverlay(
     }
 
     // Read on each show, since a theme switch does not rebuild the overlay.
-    private fun isNightMode(): Boolean =
-        context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-            Configuration.UI_MODE_NIGHT_YES
+    private fun isNightMode(): Boolean = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+        Configuration.UI_MODE_NIGHT_YES
 
     private fun setWindowVisible(visible: Boolean) {
         if (!attached) return

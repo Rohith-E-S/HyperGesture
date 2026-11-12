@@ -25,8 +25,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-internal fun fixture(): String =
-    requireNotNull(ReleaseTest::class.java.getResource("/github-release-latest.json")).readText()
+internal fun fixture(): String = requireNotNull(ReleaseTest::class.java.getResource("/github-release-latest.json")).readText()
 
 class ReleaseTest {
 
@@ -185,13 +184,12 @@ class ReleaseTest {
         assertNull(release.apk)
     }
 
-    private fun release(tag: String, apk: Boolean = true, draft: Boolean = false, pre: Boolean = false) =
-        Release(
-            tag = tag,
-            draft = draft,
-            prerelease = pre,
-            apk = ReleaseAsset("hypergesture.apk", "https://github.com/a.apk", 1, null).takeIf { apk },
-        )
+    private fun release(tag: String, apk: Boolean = true, draft: Boolean = false, pre: Boolean = false) = Release(
+        tag = tag,
+        draft = draft,
+        prerelease = pre,
+        apk = ReleaseAsset("hypergesture.apk", "https://github.com/a.apk", 1, null).takeIf { apk },
+    )
 
     @Test
     fun `same release as installed is up to date`() {

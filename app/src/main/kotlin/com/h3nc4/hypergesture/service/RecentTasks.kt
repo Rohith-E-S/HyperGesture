@@ -18,6 +18,7 @@
 package com.h3nc4.hypergesture.service
 
 import android.os.SystemClock
+import com.h3nc4.hypergesture.navigation.ShellRunner
 import com.h3nc4.hypergesture.navigation.ShizukuAvailability
 import com.h3nc4.hypergesture.navigation.ShizukuGateway
 import com.h3nc4.hypergesture.navigation.ShizukuShellRunner
@@ -31,6 +32,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.CoroutineContext
 
 /**
  * The recents stack the user actually sees, newest first, read through Shizuku.
@@ -44,13 +46,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * touch begins, which is usually finished by the time the swipe fires.
  */
 internal class RecentTasksSource(
-    private val shell: ShizukuShellRunner = ShizukuShellRunner(),
+    private val shell: ShellRunner = ShizukuShellRunner(),
     private val gateway: ShizukuGateway = SystemShizukuGateway,
     private val isAppSwitchEnabled: () -> Boolean = { true },
+    private val clock: () -> Long = SystemClock::elapsedRealtime,
+    coroutineContext: CoroutineContext = Dispatchers.IO,
 ) {
 
     private val scope = CoroutineScope(
-        SupervisorJob() + Dispatchers.IO +
+        SupervisorJob() + coroutineContext +
             CoroutineExceptionHandler { _, throwable ->
                 android.util.Log.w("HyperGesture", "Could not read the recents stack", throwable)
             },
@@ -66,7 +70,7 @@ internal class RecentTasksSource(
 
     /** The last list, when it was fetched less than [maxAgeMs] ago; null when too old. */
     fun cached(maxAgeMs: Long): List<String>? {
-        val age = SystemClock.elapsedRealtime() - fetchedAt
+        val age = clock() - fetchedAt
         return packages?.takeIf { age in 0..maxAgeMs }
     }
 
@@ -87,7 +91,7 @@ internal class RecentTasksSource(
                 val parsed = parseRecentTasks(result.output)
                 if (parsed.isNotEmpty()) {
                     packages = parsed
-                    fetchedAt = SystemClock.elapsedRealtime()
+                    fetchedAt = clock()
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled

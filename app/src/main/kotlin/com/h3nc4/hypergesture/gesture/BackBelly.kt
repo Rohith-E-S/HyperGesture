@@ -53,8 +53,7 @@ object BackBelly {
     }
 
     /** Width as a fraction of the full width at [t], from 0 at the top to 1 at the bottom. */
-    fun profile(t: Float): Float =
-        ((bell(t.coerceIn(0f, 1f) - HALF) - endValue) / (1 - endValue)).coerceIn(0f, 1f)
+    fun profile(t: Float): Float = ((bell(t.coerceIn(0f, 1f) - HALF) - endValue) / (1 - endValue)).coerceIn(0f, 1f)
 
     private fun bell(offset: Float): Float {
         val z = offset / SIGMA

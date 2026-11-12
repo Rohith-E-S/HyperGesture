@@ -49,8 +49,7 @@ class SetupChecklistTest {
         navigationBarHidden = true,
     )
 
-    private fun state(facts: SetupFacts, step: SetupStep) =
-        SetupChecklist.evaluate(facts)[step]?.state
+    private fun state(facts: SetupFacts, step: SetupStep) = SetupChecklist.evaluate(facts)[step]?.state
 
     @Test
     fun `first run asks for every required step with later ones locked`() {

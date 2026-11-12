@@ -107,11 +107,10 @@ class GestureTileService : TileService() {
         }
     }
 
-    private fun currentFace() =
-        TileFace.of(
-            serviceEnabled = DiagnosticsCollector.isAccessibilityServiceEnabled(this),
-            gesturesEnabled = lastKnownGesturesEnabled ?: true,
-        )
+    private fun currentFace() = TileFace.of(
+        serviceEnabled = DiagnosticsCollector.isAccessibilityServiceEnabled(this),
+        gesturesEnabled = lastKnownGesturesEnabled ?: true,
+    )
 
     private fun refresh() {
         val tile = qsTile ?: return

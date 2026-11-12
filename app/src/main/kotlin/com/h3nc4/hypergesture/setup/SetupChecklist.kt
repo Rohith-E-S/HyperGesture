@@ -86,7 +86,8 @@ data class SetupChecklist(val items: List<SetupItem>) {
             val items = buildList {
                 if (facts.restrictedSettingsApply) {
                     // The switch only turns on once restricted settings are allowed.
-                    val done = facts.restrictedSettingsConfirmed || facts.serviceEverEnabled ||
+                    val done = facts.restrictedSettingsConfirmed ||
+                        facts.serviceEverEnabled ||
                         facts.service != ServiceStatus.OFF
                     add(required(SetupStep.RESTRICTED_SETTINGS, if (done) StepState.DONE else StepState.UNVERIFIED))
                 }
@@ -113,20 +114,17 @@ data class SetupChecklist(val items: List<SetupItem>) {
             return SetupChecklist(items)
         }
 
-        private fun required(step: SetupStep, state: StepState) =
-            SetupItem(step, SetupGroup.REQUIRED, state)
+        private fun required(step: SetupStep, state: StepState) = SetupItem(step, SetupGroup.REQUIRED, state)
 
-        private fun afterAccessibility(step: SetupStep, done: Boolean, accessibilityDone: Boolean) =
-            when {
-                done -> required(step, StepState.DONE)
-                accessibilityDone -> required(step, StepState.UNVERIFIED)
-                else -> SetupItem(step, SetupGroup.REQUIRED, StepState.LOCKED, SetupStep.ACCESSIBILITY)
-            }
+        private fun afterAccessibility(step: SetupStep, done: Boolean, accessibilityDone: Boolean) = when {
+            done -> required(step, StepState.DONE)
+            accessibilityDone -> required(step, StepState.UNVERIFIED)
+            else -> SetupItem(step, SetupGroup.REQUIRED, StepState.LOCKED, SetupStep.ACCESSIBILITY)
+        }
 
         // The bar waits for a running service and the tile, which are the way back if gestures stop.
         private fun navigationBar(facts: SetupFacts, accessibilityDone: Boolean): SetupItem {
-            fun item(state: StepState, waitsOn: SetupStep? = null) =
-                SetupItem(SetupStep.NAVIGATION_BAR, SetupGroup.RECOMMENDED, state, waitsOn)
+            fun item(state: StepState, waitsOn: SetupStep? = null) = SetupItem(SetupStep.NAVIGATION_BAR, SetupGroup.RECOMMENDED, state, waitsOn)
             return when {
                 !facts.navigationBarChangeable -> item(StepState.UNAVAILABLE)
                 facts.navigationBarHidden -> item(StepState.DONE)

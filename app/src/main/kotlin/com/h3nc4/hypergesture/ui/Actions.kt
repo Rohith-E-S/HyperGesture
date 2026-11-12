@@ -23,7 +23,6 @@ import android.app.StatusBarManager
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
-import android.graphics.drawable.Icon as PlatformIcon
 import android.os.Build
 import android.os.PowerManager
 import android.os.Process
@@ -32,6 +31,7 @@ import androidx.core.net.toUri
 import com.h3nc4.hypergesture.R
 import com.h3nc4.hypergesture.setup.GestureTileService
 import com.h3nc4.hypergesture.setup.TileAddOutcome
+import android.graphics.drawable.Icon as PlatformIcon
 
 /**
  * NEW_TASK is required from a non-Activity context and wrong from an Activity one, where it
@@ -54,8 +54,7 @@ internal fun Context.findActivity(): Activity? {
     return null
 }
 
-internal fun openAccessibility(context: Context) =
-    context.startFirst(GestureTileService.accessibilityIntent(context))
+internal fun openAccessibility(context: Context) = context.startFirst(GestureTileService.accessibilityIntent(context))
 
 /** Autostart decides whether HyperOS restores the service after a reboot. */
 internal fun openAutostart(context: Context) = context.startFirst(
@@ -71,8 +70,7 @@ private fun appDetails(context: Context) = Intent(
     "package:${context.packageName}".toUri(),
 )
 
-internal fun openUsageAccess(context: Context) =
-    context.startFirst(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+internal fun openUsageAccess(context: Context) = context.startFirst(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
 
 /** AOSP's assist and voice input screen, where the assistant is chosen. */
 internal fun openAssistantSettings(context: Context) = context.startFirst(
@@ -133,9 +131,8 @@ internal fun hasUsageAccess(context: Context): Boolean {
 }
 
 /** A yes is trusted. HyperOS keeps its own Power setting, so a no proves nothing there. */
-internal fun batteryUnrestricted(context: Context): Boolean =
-    context.getSystemService(PowerManager::class.java)
-        ?.isIgnoringBatteryOptimizations(context.packageName) == true
+internal fun batteryUnrestricted(context: Context): Boolean = context.getSystemService(PowerManager::class.java)
+    ?.isIgnoringBatteryOptimizations(context.packageName) == true
 
 internal enum class Assistant { GOOGLE, OTHER, UNKNOWN }
 

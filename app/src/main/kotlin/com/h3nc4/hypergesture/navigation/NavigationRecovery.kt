@@ -74,6 +74,7 @@ enum class RecoveryStatus {
 enum class RecoveryTrigger {
     MANUAL,
     RESUME,
+
     /** The service just bound, which is the first moment the safety setup can be complete. */
     SERVICE_CONNECTED,
     BOOT,
@@ -138,10 +139,9 @@ internal class NavigationRecoveryRepository(private val context: Context) : Reco
         }
     }
 
-    override suspend fun exemptionsGranted(): Boolean =
-        context.navigationRecoveryStore.data
-            .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
-            .first()[EXEMPTIONS_GRANTED] ?: false
+    override suspend fun exemptionsGranted(): Boolean = context.navigationRecoveryStore.data
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .first()[EXEMPTIONS_GRANTED] ?: false
 
     override suspend fun markExemptionsGranted(granted: Boolean) {
         context.navigationRecoveryStore.edit { it[EXEMPTIONS_GRANTED] = granted }
@@ -166,8 +166,7 @@ internal fun decodeRecoveryStatus(name: String?): RecoveryStatus = when (name) {
     else -> RecoveryStatus.entries.firstOrNull { it.name == name } ?: RecoveryStatus.DISABLED
 }
 
-internal fun decodeRecoveryTrigger(name: String?): RecoveryTrigger? =
-    name?.let { stored -> RecoveryTrigger.entries.firstOrNull { it.name == stored } }
+internal fun decodeRecoveryTrigger(name: String?): RecoveryTrigger? = name?.let { stored -> RecoveryTrigger.entries.firstOrNull { it.name == stored } }
 
 object NavigationRecoveryScheduler {
     const val PERIODIC_WORK = "navigation-recovery-periodic"

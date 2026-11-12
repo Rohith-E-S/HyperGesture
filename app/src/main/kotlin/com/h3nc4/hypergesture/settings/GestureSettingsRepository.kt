@@ -87,11 +87,9 @@ class GestureSettingsRepository internal constructor(
         }
     }
 
-    private fun toConfiguration(preferences: Preferences): GestureConfiguration =
-        storedConfiguration(preferences, debugRecentsHold(), debugAppSwitch())
+    private fun toConfiguration(preferences: Preferences): GestureConfiguration = storedConfiguration(preferences, debugRecentsHold(), debugAppSwitch())
 
-    private fun toStoredConfiguration(preferences: Preferences): GestureConfiguration =
-        storedConfiguration(preferences, recentsHoldOverride = null, appSwitchOverride = null)
+    private fun toStoredConfiguration(preferences: Preferences): GestureConfiguration = storedConfiguration(preferences, recentsHoldOverride = null, appSwitchOverride = null)
 
     private fun storedConfiguration(
         preferences: Preferences,
@@ -104,27 +102,27 @@ class GestureSettingsRepository internal constructor(
             enabled = preferences[ENABLED] ?: defaults.enabled,
             edgeWidthDp = preferences[EDGE_WIDTH_DP] ?: defaults.edgeWidthDp,
             sideMinimumSwipeDistanceDp =
-                preferences[SIDE_MIN_DISTANCE_DP] ?: defaults.sideMinimumSwipeDistanceDp,
+            preferences[SIDE_MIN_DISTANCE_DP] ?: defaults.sideMinimumSwipeDistanceDp,
             bottomMinimumSwipeDistanceDp =
-                preferences[BOTTOM_MIN_DISTANCE_DP] ?: defaults.bottomMinimumSwipeDistanceDp,
+            preferences[BOTTOM_MIN_DISTANCE_DP] ?: defaults.bottomMinimumSwipeDistanceDp,
             maximumArmDurationMs =
-                preferences[MAX_ARM_DURATION_MS] ?: defaults.maximumArmDurationMs,
+            preferences[MAX_ARM_DURATION_MS] ?: defaults.maximumArmDurationMs,
             recentsHoldMs = recentsHoldOverride ?: storedHoldMs,
             holdStillnessDp = preferences[HOLD_STILLNESS_DP] ?: defaults.holdStillnessDp,
             offAxisToleranceRatio =
-                preferences[OFF_AXIS_TOLERANCE] ?: defaults.offAxisToleranceRatio,
+            preferences[OFF_AXIS_TOLERANCE] ?: defaults.offAxisToleranceRatio,
             appSwitchEnabled = appSwitchOverride ?: (preferences[APP_SWITCH] ?: defaults.appSwitchEnabled),
             leftEdgeBackEnabled = preferences[LEFT_EDGE_BACK] ?: defaults.leftEdgeBackEnabled,
             rightEdgeBackEnabled = preferences[RIGHT_EDGE_BACK] ?: defaults.rightEdgeBackEnabled,
             hapticFeedbackEnabled = preferences[HAPTIC_FEEDBACK] ?: defaults.hapticFeedbackEnabled,
             landscapeConfirmEnabled =
-                preferences[LANDSCAPE_CONFIRM] ?: defaults.landscapeConfirmEnabled,
+            preferences[LANDSCAPE_CONFIRM] ?: defaults.landscapeConfirmEnabled,
             circleToSearchEnabled =
-                preferences[CIRCLE_TO_SEARCH] ?: defaults.circleToSearchEnabled,
+            preferences[CIRCLE_TO_SEARCH] ?: defaults.circleToSearchEnabled,
             circleToSearchFollowsSystemTiming = preferences[CIRCLE_TO_SEARCH_SYSTEM_TIMING]
                 ?: defaults.circleToSearchFollowsSystemTiming,
             circleToSearchHoldMs =
-                preferences[CIRCLE_TO_SEARCH_HOLD_MS] ?: defaults.circleToSearchHoldMs,
+            preferences[CIRCLE_TO_SEARCH_HOLD_MS] ?: defaults.circleToSearchHoldMs,
         )
     }
 

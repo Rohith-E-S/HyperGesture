@@ -159,35 +159,33 @@ internal class HttpApkDownloader(
     private val progressContext: CoroutineContext,
 ) : ApkDownloader {
 
-    override suspend fun download(asset: ReleaseAsset, onProgress: (Int?) -> Unit): DownloadResult =
-        withContext(Dispatchers.IO) {
-            val file = File(directory, ReleaseParser.APK_NAME)
-            val result = try {
-                Files.createDirectories(directory.toPath())
-                Files.list(directory.toPath()).use { stale -> stale.forEach(::discard) }
-                fetch(asset, file, onProgress)
-            } catch (e: BlockedHostException) {
-                DownloadResult.BlockedHost(e.host)
-            } catch (e: IOException) {
-                DownloadResult.Failed(e.reason())
-            }
-            if (result !is DownloadResult.Ok) discard(file.toPath())
-            result
+    override suspend fun download(asset: ReleaseAsset, onProgress: (Int?) -> Unit): DownloadResult = withContext(Dispatchers.IO) {
+        val file = File(directory, ReleaseParser.APK_NAME)
+        val result = try {
+            Files.createDirectories(directory.toPath())
+            Files.list(directory.toPath()).use { stale -> stale.forEach(::discard) }
+            fetch(asset, file, onProgress)
+        } catch (e: BlockedHostException) {
+            DownloadResult.BlockedHost(e.host)
+        } catch (e: IOException) {
+            DownloadResult.Failed(e.reason())
         }
+        if (result !is DownloadResult.Ok) discard(file.toPath())
+        result
+    }
 
-    private suspend fun fetch(asset: ReleaseAsset, file: File, onProgress: (Int?) -> Unit): DownloadResult =
-        followRedirects(transport, asset.downloadUrl, "application/octet-stream").use { response ->
-            if (response.code != 200) return DownloadResult.Failed("HTTP ${response.code}")
-            val meter = ProgressMeter(asset.size.takeIf { it > 0 } ?: response.contentLength)
-            val actual = copyHashing(response.body(), file) { bytes ->
-                if (meter.add(bytes)) withContext(progressContext) { onProgress(meter.percent) }
-            }
-            when (asset.sha256) {
-                null -> DownloadResult.Ok(file, verified = false)
-                actual -> DownloadResult.Ok(file, verified = true)
-                else -> DownloadResult.ChecksumMismatch
-            }
+    private suspend fun fetch(asset: ReleaseAsset, file: File, onProgress: (Int?) -> Unit): DownloadResult = followRedirects(transport, asset.downloadUrl, "application/octet-stream").use { response ->
+        if (response.code != 200) return DownloadResult.Failed("HTTP ${response.code}")
+        val meter = ProgressMeter(asset.size.takeIf { it > 0 } ?: response.contentLength)
+        val actual = copyHashing(response.body(), file) { bytes ->
+            if (meter.add(bytes)) withContext(progressContext) { onProgress(meter.percent) }
         }
+        when (asset.sha256) {
+            null -> DownloadResult.Ok(file, verified = false)
+            actual -> DownloadResult.Ok(file, verified = true)
+            else -> DownloadResult.ChecksumMismatch
+        }
+    }
 
     private suspend fun copyHashing(input: InputStream, file: File, onChunk: suspend (Int) -> Unit): String {
         val digest = MessageDigest.getInstance("SHA-256")

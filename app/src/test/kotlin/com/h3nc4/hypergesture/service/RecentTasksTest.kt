@@ -95,4 +95,94 @@ class RecentTasksTest {
         """.trimIndent()
         assertEquals(listOf("com.example.app"), parseRecentTasks(coldDump))
     }
+
+    @Test
+    fun `duplicate tasks of same package are deduplicated preserving newest`() {
+        val dumpWithDuplicates = """
+            ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+              Recent tasks:
+              * Recent #0: Task{111 #101 type=standard A=com.app.a}
+                mActivityComponent=com.app.a/.MainActivity
+              * Recent #1: Task{222 #102 type=standard A=com.app.b}
+                mActivityComponent=com.app.b/.MainActivity
+              * Recent #2: Task{333 #103 type=standard A=com.app.a}
+                mActivityComponent=com.app.a/.OtherActivity
+        """.trimIndent()
+        assertEquals(listOf("com.app.a", "com.app.b"), parseRecentTasks(dumpWithDuplicates))
+    }
+
+    @Test
+    fun `multiple hidden tasks in mHiddenTasks are all excluded`() {
+        val dumpHidden = """
+            ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+            mHiddenTasks=[Task{aaa #101 type=standard A=com.app.a}, Task{bbb #102 type=standard A=com.app.b}]
+              Recent tasks:
+              * Recent #0: Task{aaa #101 type=standard A=com.app.a}
+                mActivityComponent=com.app.a/.MainActivity
+              * Recent #1: Task{bbb #102 type=standard A=com.app.b}
+                mActivityComponent=com.app.b/.MainActivity
+              * Recent #2: Task{ccc #103 type=standard A=com.app.c}
+                mActivityComponent=com.app.c/.MainActivity
+        """.trimIndent()
+        assertEquals(listOf("com.app.c"), parseRecentTasks(dumpHidden))
+    }
+
+    @Test
+    fun `non-standard task types like recents, home, dream are excluded`() {
+        val dumpTypes = """
+            ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+              Recent tasks:
+              * Recent #0: Task{1 #1 type=home I=com.launcher/.Home}
+                mActivityComponent=com.launcher/.Home
+              * Recent #1: Task{2 #2 type=recents I=com.recents/.Recents}
+                mActivityComponent=com.recents/.Recents
+              * Recent #2: Task{3 #3 type=dream I=com.screensaver/.Screensaver}
+                mActivityComponent=com.screensaver/.Screensaver
+              * Recent #3: Task{4 #4 type=standard A=com.app.standard}
+                mActivityComponent=com.app.standard/.MainActivity
+        """.trimIndent()
+        assertEquals(listOf("com.app.standard"), parseRecentTasks(dumpTypes))
+    }
+
+    @Test
+    fun `tasks with autoRemoveRecents=true or isForceExcludedFromRecents=true are excluded`() {
+        val dumpExcluded = """
+            ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+              Recent tasks:
+              * Recent #0: Task{1 #101 type=standard A=com.app.auto}
+                mActivityComponent=com.app.auto/.MainActivity
+                autoRemoveRecents=true
+              * Recent #1: Task{2 #102 type=standard A=com.app.force}
+                mActivityComponent=com.app.force/.MainActivity
+                isForceExcludedFromRecents=true
+              * Recent #2: Task{3 #103 type=standard A=com.app.ok}
+                mActivityComponent=com.app.ok/.MainActivity
+                autoRemoveRecents=false isForceExcludedFromRecents=false
+        """.trimIndent()
+        assertEquals(listOf("com.app.ok"), parseRecentTasks(dumpExcluded))
+    }
+
+    @Test
+    fun `malformed dumpsys lines without component are safely ignored`() {
+        val dumpMalformed = """
+            ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+              Recent tasks:
+              * Recent #0: Task{1 #101 type=standard A=com.app.corrupt}
+                corruptLineWithoutComponentHere
+              * Recent #1: Task{2 #102 type=standard A=com.app.valid}
+                mActivityComponent=com.app.valid/.MainActivity
+        """.trimIndent()
+        assertEquals(listOf("com.app.valid"), parseRecentTasks(dumpMalformed))
+    }
+
+    @Test
+    fun `dump with whitespace variations in task headers parses correctly`() {
+        val dumpWhitespace = """
+            ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)
+            mHiddenTasks=[]
+                * Recent #0: Task{a1b2c3d #999 type=standard A=com.app.whitespace}
+                     mActivityComponent=com.app.whitespace/.MainActivity
+        """.trimIndent()
+        assertEquals(listOf("com.app.whitespace"), parseRecentTasks(dumpWhitespace))
+    }
 }

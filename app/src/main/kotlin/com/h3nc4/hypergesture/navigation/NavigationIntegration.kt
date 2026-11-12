@@ -50,11 +50,10 @@ interface NavigationIntegration {
     val assistantAttributionTag: String? get() = null
 
     companion object {
-        fun create(context: Context): NavigationIntegration =
-            if (NavigationModeReader.isHyperOsDevice()) {
-                HyperOSNavigationIntegration(context)
-            } else {
-                GenericAndroidNavigationIntegration(context)
-            }
+        fun create(context: Context): NavigationIntegration = if (NavigationModeReader.isHyperOsDevice()) {
+            HyperOSNavigationIntegration(context)
+        } else {
+            GenericAndroidNavigationIntegration(context)
+        }
     }
 }

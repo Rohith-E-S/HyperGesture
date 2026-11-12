@@ -48,14 +48,14 @@ import com.h3nc4.hypergesture.navigation.NavigationMode
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRepository
 import com.h3nc4.hypergesture.navigation.NavigationRecoveryRuntime
 import com.h3nc4.hypergesture.navigation.RecoveryState
-import com.h3nc4.hypergesture.navigation.applyGesturesEnabled
-import com.h3nc4.hypergesture.setup.AccessibilityAlert
-import com.h3nc4.hypergesture.setup.GestureTileService
 import com.h3nc4.hypergesture.navigation.RecoveryTrigger
+import com.h3nc4.hypergesture.navigation.applyGesturesEnabled
 import com.h3nc4.hypergesture.service.AppSwitcher
 import com.h3nc4.hypergesture.service.GestureActionPerformer
 import com.h3nc4.hypergesture.service.HyperGestureAccessibilityService
 import com.h3nc4.hypergesture.settings.GestureSettingsRepository
+import com.h3nc4.hypergesture.setup.AccessibilityAlert
+import com.h3nc4.hypergesture.setup.GestureTileService
 import com.h3nc4.hypergesture.setup.SetupChecklist
 import com.h3nc4.hypergesture.setup.SetupFacts
 import com.h3nc4.hypergesture.setup.SetupFlag
@@ -69,7 +69,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import rikka.shizuku.Shizuku
 
 /** Everything the screens show, read once per resume and kept current by the two flows. */
@@ -213,8 +212,10 @@ internal class AppModel(
     }
 
     fun requestShizukuPermission() {
-        if (Shizuku.pingBinder()) runCatching {
-            Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST)
+        if (Shizuku.pingBinder()) {
+            runCatching {
+                Shizuku.requestPermission(SHIZUKU_PERMISSION_REQUEST)
+            }
         }
     }
 
